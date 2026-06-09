@@ -1,0 +1,65 @@
+.sidebar {
+  width: 190px; min-height: 100vh;
+  background: var(--bg2); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  position: fixed; top: 0; left: 0; z-index: 100;
+}
+.logo {
+  display: flex; align-items: center; gap: 8px;
+  padding: 18px 16px; border-bottom: 1px solid var(--border);
+  font-size: 15px; font-weight: 700; color: var(--accent2);
+}
+.nav { display: flex; flex-direction: column; gap: 3px; padding: 12px 8px; flex: 1; }
+.link {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: var(--radius);
+  color: var(--text2); text-decoration: none; font-weight: 500; font-size: 13px;
+  transition: all .15s;
+}
+.link:hover { background: var(--bg3); color: var(--text); }
+.active     { background: var(--accent) !important; color: #fff !important; }
+.auth {
+  padding: 8px; border-top: 1px solid var(--border); display: flex;
+  flex-direction: column; gap: 4px;
+}
+.userInfo {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; color: var(--text2); font-size: 12px;
+}
+.userName { color: var(--text); font-weight: 600; font-size: 13px; }
+.badgeFree { color: var(--accent); margin-left: auto; }
+.badgePay { color: var(--success); margin-left: auto; }
+.subLink {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-radius: var(--radius);
+  color: var(--warning); text-decoration: none; font-size: 13px; font-weight: 500;
+  transition: background .15s;
+}
+.subLink:hover { background: rgba(234,179,8,.1); }
+.authBtn {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-radius: var(--radius);
+  color: var(--danger); background: none; border: none;
+  cursor: pointer; font-size: 13px; font-weight: 500;
+  transition: background .15s;
+}
+.authBtn:hover { background: rgba(239,68,68,.1); }
+.footer { padding: 12px 16px; color: var(--text2); font-size: 11px; border-top: 1px solid var(--border); }
+
+@media (max-width: 768px) {
+  .sidebar {
+    width: 100%; min-height: auto; position: fixed; bottom: 0; top: auto; left: 0;
+    flex-direction: row; align-items: center; border-right: none;
+    border-top: 1px solid var(--border); z-index: 200; height: 56px;
+  }
+  .logo, .footer, .auth { display: none; }
+  .nav {
+    flex-direction: row; padding: 4px 8px; gap: 0; width: 100%;
+    justify-content: space-around;
+  }
+  .link {
+    flex-direction: column; gap: 2px; padding: 6px 8px; font-size: 10px;
+    border-radius: 8px; flex: 1; justify-content: center;
+  }
+  .link svg { width: 18px; height: 18px; }
+}

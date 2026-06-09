@@ -1,0 +1,47 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #0f1117;
+  --bg2:       #1a1d27;
+  --bg3:       #22263a;
+  --border:    #2e3250;
+  --accent:    #6366f1;
+  --accent2:   #818cf8;
+  --success:   #22c55e;
+  --warning:   #eab308;
+  --danger:    #ef4444;
+  --text:      #e2e8f0;
+  --text2:     #94a3b8;
+  --radius:    10px;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  font-size: 14px;
+}
+
+input, select, textarea, button {
+  font-family: inherit;
+  font-size: 14px;
+}
+
+input, select, textarea {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  outline: none;
+  transition: border-color .2s;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+input::placeholder { color: var(--text2); }
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg2); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }

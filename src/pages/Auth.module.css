@@ -1,0 +1,111 @@
+.page {
+  min-height: 100vh;
+  background: radial-gradient(ellipse at 30% 20%, #1a1d2e 0%, #0f1117 70%);
+  display: flex; align-items: center; justify-content: center;
+}
+
+.wrapper {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; padding: 2rem;
+}
+
+.card {
+  background: var(--bg2); border-radius: 16px;
+  padding: 2.5rem; width: 100%; max-width: 420px;
+  box-shadow: 0 8px 40px rgba(0,0,0,.4);
+}
+
+.cardHeader {
+  display: flex; flex-direction: column; align-items: center;
+  margin-bottom: 2rem; gap: .15rem;
+}
+
+.appName { font-size: 1.6rem; font-weight: 800; color: var(--accent); letter-spacing: -.02em; }
+.appSub  { font-size: .8rem; color: var(--text2); }
+
+.tabs {
+  display: flex; gap: 0; margin-bottom: 1.75rem;
+  border-radius: var(--radius); overflow: hidden;
+  border: 1px solid var(--bg3);
+}
+
+.tab {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  gap: .5rem; padding: .7rem 1rem; cursor: pointer;
+  background: transparent; border: none; color: var(--text2);
+  font-size: .85rem; transition: all .2s;
+}
+
+.tabActif { background: var(--accent); color: #fff; }
+
+.form { display: flex; flex-direction: column; gap: 1.1rem; }
+
+.field { display: flex; flex-direction: column; gap: .35rem; }
+.field label { font-size: .78rem; color: var(--text2); font-weight: 500; }
+
+.inputWrap {
+  display: flex; align-items: center;
+  background: var(--bg3); border-radius: var(--radius);
+  border: 1px solid transparent; transition: border .2s;
+}
+.inputWrap:focus-within { border-color: var(--accent); }
+
+.inputIcon { margin-left: .75rem; color: var(--text2); flex-shrink: 0; }
+
+.inputWrap input {
+  flex: 1; padding: .65rem .75rem; border: none; background: transparent;
+  color: var(--text); font-size: .9rem; outline: none;
+}
+
+.pwdToggle {
+  background: none; border: none; color: var(--text2); cursor: pointer;
+  padding: .5rem .75rem; display: flex;
+}
+
+.remember {
+  display: flex; align-items: center; gap: .5rem;
+  font-size: .82rem; color: var(--text2); cursor: pointer;
+}
+.remember input { accent-color: var(--accent); }
+
+.btnPrimary {
+  display: flex; align-items: center; justify-content: center; gap: .5rem;
+  padding: .75rem 1.5rem; background: var(--accent); color: #fff;
+  border: none; border-radius: var(--radius); font-size: .9rem;
+  font-weight: 600; cursor: pointer; transition: opacity .2s;
+}
+.btnPrimary:disabled { opacity: .5; cursor: not-allowed; }
+.btnPrimary:hover:not(:disabled) { opacity: .9; }
+
+.spin { animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg) } }
+
+.success, .error {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .7rem 1rem; border-radius: var(--radius);
+  font-size: .82rem;
+}
+.success { background: rgba(34,197,94,.12); border: 1px solid var(--success); color: var(--success); }
+.error   { background: rgba(239,68,68,.12); border: 1px solid var(--danger); color: var(--danger); }
+
+.switch {
+  text-align: center; margin-top: 1.5rem; color: var(--text2);
+  font-size: .82rem;
+}
+.switch button {
+  background: none; border: none; color: var(--accent);
+  cursor: pointer; text-decoration: underline; font-size: .82rem;
+}
+
+.iconSuccess { color: var(--success); margin-bottom: .75rem; }
+.userName { font-size: 1.15rem; font-weight: 600; text-align: center; }
+.userEmail { color: var(--text2); text-align: center; margin-bottom: 1.25rem; font-size: .85rem; }
+
+.btnLogout {
+  display: flex; align-items: center; justify-content: center; gap: .5rem;
+  width: 100%; padding: .75rem 1.5rem; margin-top: .7rem;
+  background: transparent; color: var(--danger); border: 1px solid var(--danger);
+  border-radius: var(--radius); font-size: .85rem; font-weight: 600;
+  cursor: pointer; transition: all .2s;
+}
+.btnLogout:hover { background: rgba(239,68,68,.1); }
