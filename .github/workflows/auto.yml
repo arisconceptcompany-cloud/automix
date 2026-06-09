@@ -18,29 +18,25 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache-dependency-path: './frontend/package-lock.json'
 
       - name: Install dependencies
-        working-directory: ./frontend
         run: npm ci
 
       - name: Build project
-        working-directory: ./frontend
         run: npm run build
 
       - name: Verify build
         run: |
-          if [ ! -d "frontend/dist" ]; then
+          if [ ! -d "dist" ]; then
             echo "dist folder missing"
             exit 1
           fi
-          if [ ! -f "frontend/dist/index.html" ]; then
+          if [ ! -f "dist/index.html" ]; then
             echo "index.html missing"
             exit 1
           fi
           echo "Build OK"
-          # Correction : on pointe vers frontend/dist
-          du -sh frontend/dist
+          du -sh dist
 
       - name: Deploy via FTP
         uses: sebastianpopp/ftp-action@releases/v2
@@ -50,7 +46,6 @@ jobs:
           password: ${{ secrets.PASS }}
           protocol: ftp
           port: 21
-          # Correction cruciale : le dossier à envoyer est dans frontend/
-          localDir: ./frontend/dist
+          localDir: ./dist
           remoteDir: /
           dangerous-clean-slate: true
