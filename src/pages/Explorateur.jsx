@@ -213,6 +213,8 @@ export default function Explorateur() {
       if (res.data.succes) {
         setLoginStatus('ok'); setConnecte(true); setLoginForce(false)
         setLoginVisible(false); setErreur(null)
+        // Recharger les catégories après connexion (cache obsolète)
+        explorer(urlSaisie, true)
       } else {
         setLoginStatus('err'); setErreur(res.data.message || 'Connexion échouée')
       }
