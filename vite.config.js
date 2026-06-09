@@ -11,9 +11,21 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'http://167.86.118.96:5005',
+        target: 'https://auto.aris-cc.com:5005',
+        secure: false,
         changeOrigin: true,
+        timeout: 600000,
+        proxyTimeout: 600000,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            proxyReq.setTimeout(600000)
+          })
+          proxy.on('proxyRes', (proxyRes) => {
+            proxyRes.setTimeout(600000)
+          })
+        },
       },
     },
+    timeout: 600000,
   },
 })
