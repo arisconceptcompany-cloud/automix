@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CreditCard, CheckCircle, AlertCircle, Loader, Zap, Smartphone, Banknote, Globe } from 'lucide-react'
 import { useAuth } from '../AuthContext'
+import ProgressBar from '../components/ProgressBar'
 import axios from 'axios'
 import styles from './Abonnement.module.css'
 
@@ -55,7 +56,7 @@ export default function Abonnement() {
   if (loading) return (
     <div className={styles.page}>
       <div className={styles.wrapper}>
-        <Loader size={32} className={styles.spin} />
+        <ProgressBar />
       </div>
     </div>
   )

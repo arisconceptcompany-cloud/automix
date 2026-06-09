@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './AuthContext'
 import Sidebar     from './components/Sidebar'
+import ProgressBar from './components/ProgressBar'
 import Excel       from './pages/Excel'
 import Explorateur from './pages/Explorateur'
 import PDFs        from './pages/PDFs'
@@ -12,8 +13,8 @@ import styles      from './App.module.css'
 
 function LoaderScreen() {
   return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', color:'var(--text2)' }}>
-      Chargement...
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh' }}>
+      <ProgressBar />
     </div>
   )
 }
@@ -84,7 +85,7 @@ function VerifyPage() {
       .catch(() => setStatus('error'))
   }, [token])
 
-  if (status === 'verifying') return <div style={{padding:'4rem',textAlign:'center',color:'var(--text2)'}}>Vérification en cours...</div>
+  if (status === 'verifying') return <div style={{padding:'4rem',textAlign:'center'}}><ProgressBar text="Vérification en cours..." /></div>
   if (status === 'done') return <Navigate to="/auth" replace />
   return <div style={{padding:'4rem',textAlign:'center',color:'var(--danger)'}}>Lien invalide ou expiré</div>
 }

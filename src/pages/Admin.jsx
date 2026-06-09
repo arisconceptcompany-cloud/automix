@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Shield, Users, Mail, Calendar, CheckCircle, XCircle, CreditCard, Loader, Search } from 'lucide-react'
+import { Shield, Users, Mail, Calendar, CheckCircle, XCircle, CreditCard, Search } from 'lucide-react'
 import axios from 'axios'
+import ProgressBar from '../components/ProgressBar'
 import styles from './Admin.module.css'
 
 export default function Admin() {
@@ -28,7 +29,7 @@ export default function Admin() {
 
   if (loading) return (
     <div className={styles.page}>
-      <Loader size={32} className={styles.spin} />
+      <ProgressBar />
     </div>
   )
 

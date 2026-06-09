@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { Upload, FileSpreadsheet, Trash2, Download, Search, RefreshCw } from 'lucide-react'
 import axios from 'axios'
 import { getCache, setCache, invalidatePrefix } from '../cache'
+import ProgressBar from '../components/ProgressBar'
 import styles from './Excel.module.css'
 
 export default function Excel() {
@@ -9,6 +10,7 @@ export default function Excel() {
   const [colonnes, setColonnes] = useState([])
   const [info,     setInfo]     = useState(null)
   const [loading,  setLoading]  = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(null)
   const [msg,      setMsg]      = useState(null)
   const [dragging, setDragging] = useState(false)
   const [filtre,   setFiltre]   = useState('')
@@ -64,17 +66,21 @@ export default function Excel() {
     if (!file.name.match(/\.(xlsx|xls)$/i)) {
       setMsg({ type: 'err', texte: 'Format non supporté — utilisez .xlsx ou .xls' }); return
     }
-    setLoading(true); setMsg(null)
+    setLoading(true); setUploadProgress(0); setMsg(null)
     const form = new FormData()
     form.append('fichier', file)
     try {
-      const r = await axios.post('/api/excel/upload', form)
+      const r = await axios.post('/api/excel/upload', form, {
+        onUploadProgress: e => setUploadProgress(Math.round((e.loaded / e.total) * 100))
+      })
       setMsg({ type: 'ok', texte: `✅ ${r.data.message}` })
       invalidatePrefix('excel_')
       await charger(true)
     } catch (e) {
       setMsg({ type: 'err', texte: e.response?.data?.erreur || "Erreur lors de l'import" })
       setLoading(false)
+    } finally {
+      setUploadProgress(null)
     }
   }
 
@@ -186,7 +192,7 @@ export default function Excel() {
 
       {/* Tableau */}
       {loading ? (
-        <div className={styles.loading}>⏳ Chargement en cours...</div>
+        <div className={styles.loading}><ProgressBar value={uploadProgress} /></div>
       ) : produits.length === 0 ? (
         <div className={styles.empty}>
           <FileSpreadsheet size={40} className={styles.emptyIcon} />

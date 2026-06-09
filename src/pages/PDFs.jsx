@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
 import { Upload, FileText, Download, Trash2, Search } from 'lucide-react'
 import axios from 'axios'
+import ProgressBar from '../components/ProgressBar'
 import styles from './PDFs.module.css'
 
 export default function PDFs() {
   const [pdfs,     setPdfs]     = useState([])
   const [loading,  setLoading]  = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(null)
   const [msg,      setMsg]      = useState(null)
   const [dragging, setDragging] = useState(false)
   const [filtre,   setFiltre]   = useState('')
@@ -33,14 +35,16 @@ export default function PDFs() {
       }
     }
     if (count === 0) { setMsg({ type: 'err', texte: 'Sélectionnez des fichiers .pdf' }); return }
-    setLoading(true); setMsg(null)
+    setLoading(true); setUploadProgress(0); setMsg(null)
     try {
-      const r = await axios.post('/api/pdf/upload', form)
+      const r = await axios.post('/api/pdf/upload', form, {
+        onUploadProgress: e => setUploadProgress(Math.round((e.loaded / e.total) * 100))
+      })
       setMsg({ type: 'ok', texte: r.data.message })
       await charger()
     } catch (e) {
       setMsg({ type: 'err', texte: e.response?.data?.erreur || 'Erreur upload' })
-    } finally { setLoading(false) }
+    } finally { setLoading(false); setUploadProgress(null) }
   }
 
   const pdfsFiltres = pdfs.filter(p =>
@@ -96,7 +100,7 @@ export default function PDFs() {
 
       {/* Grille PDFs */}
       {loading ? (
-        <div className={styles.loading}>Chargement...</div>
+        <div className={styles.loading}><ProgressBar value={uploadProgress} /></div>
       ) : pdfs.length === 0 ? (
         <div className={styles.empty}>
           <FileText size={40} className={styles.emptyIcon} />

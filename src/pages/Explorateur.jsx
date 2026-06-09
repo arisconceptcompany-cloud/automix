@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import axios from 'axios'
 import { getCache, setCache } from '../cache'
+import ProgressBar from '../components/ProgressBar'
 import styles from './Explorateur.module.css'
 
 const MARQUES_DISPONIBLES = ['ASKO', 'BEKO', 'AEG', 'BOSCH', 'SIEMENS', 'NEFF', 'SMEG', 'LG', 'SAMSUNG', 'WHIRLPOOL', 'MIELE', 'ELECTROLUX', 'CANDY', 'HAIER', 'FAGOR', 'AMICA']
@@ -140,22 +141,49 @@ export default function Explorateur() {
     setNouvelleMarque('')
   }
 
-  const explorer = async (urlForce) => {
+  const explorer = async (urlForce, forceReload = false) => {
     const url = (urlForce || urlSaisie).trim()
     if (!url.startsWith('http')) { setErreur('URL invalide — commencez par http'); return }
     setErreur(null); setLoadingLiens(true)
     setLiens([]); setSiteInfo(null); setLienActif(null); setProduits([])
-    try {
-      const res = await axios.post('/api/explorateur/liens', { url })
-      setLiens(res.data.liens || [])
-      setSiteInfo(res.data.site || {})
 
-      const isCedi = res.data.cedi_site || false
-      const isConnected = res.data.connecte || false
+    const cacheKey = 'explo_liens_' + url
+    if (!forceReload) {
+      const cached = getCache(cacheKey, 1800000)
+      if (cached) {
+        setLiens(cached.liens || [])
+        setSiteInfo(cached.site || {})
+        setCediSite(cached.cedi_site || false)
+        setConnecte(cached.connecte || false)
+        setLoadingLiens(false)
+        if (cached.cedi_site && !cached.connecte) {
+          setLoginVisible(true)
+          setLoginForce(true)
+          setToast({ message: '🔐 Connectez-vous à votre compte CEDI (email + N° client + mot de passe) pour accéder aux produits', type: 'info' })
+        } else {
+          setLoginForce(false)
+          const aLogin = (cached.liens || []).some(l =>
+            /login|connexion|compte|account|signin/i.test(l.href)
+          )
+          if (aLogin && !loginStatus) setLoginVisible(true)
+        }
+        return
+      }
+    }
+
+    try {
+      const res = await axios.post('/api/explorateur/liens', { url, force: forceReload })
+      const d = res.data
+      setCache(cacheKey, d)
+      setLiens(d.liens || [])
+      setSiteInfo(d.site || {})
+
+      const isCedi = d.cedi_site || false
+      const isConnected = d.connecte || false
       setCediSite(isCedi)
       setConnecte(isConnected)
 
-      ajouterHistorique(url, res.data.site?.titre || url)
+      ajouterHistorique(url, d.site?.titre || url)
 
       if (isCedi && !isConnected) {
         setLoginVisible(true)
@@ -163,7 +191,7 @@ export default function Explorateur() {
         setToast({ message: '🔐 Connectez-vous à votre compte CEDI (email + N° client + mot de passe) pour accéder aux produits', type: 'info' })
       } else {
         setLoginForce(false)
-        const aLogin = (res.data.liens || []).some(l =>
+        const aLogin = (d.liens || []).some(l =>
           /login|connexion|compte|account|signin/i.test(l.href)
         )
         if (aLogin && !loginStatus) setLoginVisible(true)
@@ -536,7 +564,7 @@ export default function Explorateur() {
           <aside className={styles.menu}>
             <div className={styles.menuTop}>
               <span>Catégories</span>
-              <button onClick={() => explorer()} title="Recharger"><RefreshCw size={12}/></button>
+              <button onClick={() => explorer(urlSaisie, true)} title="Recharger"><RefreshCw size={12}/></button>
             </div>
 
             <div className={styles.marquesSection}>
@@ -578,7 +606,7 @@ export default function Explorateur() {
 
             <div className={styles.menuBody}>
               {loadingLiens ? (
-                <div className={styles.menuLoading}><Loader size={15} className={styles.spin}/> Chargement...</div>
+                <div className={styles.menuLoading}><ProgressBar /></div>
               ) : liensProduits.length === 0 ? (
                 <div className={styles.menuVide}>Aucune catégorie produit trouvée sur ce site</div>
               ) : (
@@ -675,7 +703,7 @@ export default function Explorateur() {
                 </div>
 
                 {loadingProd ? (
-                  <div className={styles.loading}><Loader size={22} className={styles.spin}/> Chargement...</div>
+                  <div className={styles.loading}><ProgressBar /></div>
                 ) : produits.length === 0 ? (
                   <div className={styles.vide}>
                     <Package size={32} style={{ opacity: .2 }}/>
