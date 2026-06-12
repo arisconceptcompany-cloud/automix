@@ -41,9 +41,9 @@ jobs:
       - name: Deploy via FTP
         uses: sebastianpopp/ftp-action@releases/v2
         with:
-          host: ${{ secrets.PTFS }}
-          user: ${{ secrets.NAME }}
-          password: ${{ secrets.PASS }}
+          host: ${{ secrets.SERVER }}
+          user: ${{ secrets.FTP_NAME }}
+          password: ${{ secrets.FTP_PASS }}
           forceSsl: false
           localDir: ./dist
           remoteDir: /
