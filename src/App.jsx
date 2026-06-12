@@ -39,6 +39,7 @@ function AdminProtect({ children }) {
 
 function AppLayout() {
   const location = useLocation()
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   const isAuth = location.pathname.startsWith('/auth')
   const isSub = location.pathname === '/abonnement'
@@ -46,8 +47,8 @@ function AppLayout() {
 
   return (
     <div className={noSidebar ? styles.authLayout : styles.layout}>
-      {!noSidebar && <Sidebar />}
-      <main className={noSidebar ? styles.authMain : styles.main}>
+      {!noSidebar && <Sidebar onToggle={setSidebarCollapsed} />}
+      <main className={noSidebar ? styles.authMain : `${styles.main} ${sidebarCollapsed ? styles.mainCollapsed : ''}`}>
         <Routes>
           <Route path="/"            element={<Navigate to="/explorateur" replace />} />
           <Route path="/auth"        element={<Auth />} />

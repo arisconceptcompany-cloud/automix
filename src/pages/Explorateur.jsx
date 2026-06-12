@@ -1,13 +1,61 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useLocation } from 'react-router-dom'
 import {
   Globe, Search, Loader, ExternalLink, ChevronRight,
-  Package, RefreshCw, Lock, Eye, EyeOff, LogIn, X, PlusCircle, Copy, Clock, CheckCircle,
+  Package, RefreshCw, Lock, Eye, EyeOff, LogIn, X, PlusCircle, Copy, CheckCircle,
   CheckSquare, Square
 } from 'lucide-react'
 import axios from 'axios'
 import { getCache, setCache } from '../cache'
 import ProgressBar from '../components/ProgressBar'
 import styles from './Explorateur.module.css'
+
+function CaptchaModal({ siteKey, onSolve, onClose, loading }) {
+  const containerRef = useRef(null)
+  const cbNameRef = useRef('')
+
+  useEffect(() => {
+    if (!siteKey || !containerRef.current) return
+    const div = containerRef.current
+    cbNameRef.current = 'captchaResolue_' + Math.random().toString(36).slice(2)
+
+    window[cbNameRef.current] = (token) => {
+      onSolve(token)
+    }
+
+    div.innerHTML = `<div class="g-recaptcha" data-sitekey="${siteKey}" data-callback="${cbNameRef.current}" data-size="normal"></div>`
+
+    if (!document.querySelector('script[src*="recaptcha/api.js"]')) {
+      const script = document.createElement('script')
+      script.src = 'https://www.google.com/recaptcha/api.js'
+      script.async = true
+      script.defer = true
+      document.body.appendChild(script)
+    } else {
+      window.grecaptcha?.render()
+    }
+
+    return () => {
+      delete window[cbNameRef.current]
+    }
+  }, [siteKey])
+
+  return (
+    <div className={styles.captchaOverlay} onClick={onClose}>
+      <div className={styles.captchaModal} onClick={e => e.stopPropagation()}>
+        <div className={styles.captchaHeader}>
+          <span>🔐 Connexion GPDIS - CAPTCHA requis</span>
+          <button onClick={onClose}><X size={14}/></button>
+        </div>
+        <p className={styles.captchaDesc}>
+          Veuillez résoudre le CAPTCHA ci-dessous pour vous connecter à GPdis.
+        </p>
+        <div className={styles.captchaWidget} ref={containerRef}/>
+        {loading && <div className={styles.captchaLoading}><Loader size={16} className={styles.spin}/> Connexion en cours...</div>}
+      </div>
+    </div>
+  )
+}
 
 const MARQUES_DISPONIBLES = ['ASKO', 'BEKO', 'AEG', 'BOSCH', 'SIEMENS', 'NEFF', 'SMEG', 'LG', 'SAMSUNG', 'WHIRLPOOL', 'MIELE', 'ELECTROLUX', 'CANDY', 'HAIER', 'FAGOR', 'AMICA']
 
@@ -34,6 +82,12 @@ export default function Explorateur() {
   const [cediSite,  setCediSite]  = useState(false)
   const [connecte,  setConnecte]  = useState(false)
   const [loginForce, setLoginForce] = useState(false)
+
+  const [captchaVisible,  setCaptchaVisible]  = useState(false)
+  const [captchaSiteKey,  setCaptchaSiteKey]  = useState('')
+  const [captchaResolv,   setCaptchaResolv]   = useState(null)
+  const captchaResolvRef = useRef(null)
+  const [captchaLoading,  setCaptchaLoading]  = useState(false)
 
   const [lienActif,   setLienActif]   = useState(null)
   const [produits,    setProduits]    = useState([])
@@ -85,7 +139,6 @@ export default function Explorateur() {
 
   // ── Historique de navigation ──────────────────────────────
   const [historique, setHistorique] = useState([])
-  const [showHistorique, setShowHistorique] = useState(false)
 
   useEffect(() => {
     const cachedHist = localStorage.getItem('historique_data')
@@ -248,10 +301,42 @@ export default function Explorateur() {
         setProduits([])
         return
       }
+      if (res.data.captcha_required) {
+        setCaptchaSiteKey(res.data.site_key)
+        setCaptchaVisible(true)
+        setCaptchaResolv({ lien, marques: marquesFinal, siteUrl: site })
+        captchaResolvRef.current = { lien, marques: marquesFinal, siteUrl: site }
+        setProduits([])
+        return
+      }
       setProduits(res.data.produits || [])
     } catch { setProduits([]) }
     finally { setLoadingProd(false) }
   }
+
+  const soumettreCaptcha = useCallback(async (token) => {
+    if (!token) return
+    setCaptchaLoading(true)
+    try {
+      const res = await axios.post('/api/explorateur/captcha', {
+        g_recaptcha_response: token,
+        site: 'gpdis',
+      })
+      if (res.data.success) {
+        setCaptchaVisible(false)
+        setToast({ message: '✅ Connexion GPDIS réussie, re-scraping...', type: 'success' })
+        setTimeout(() => setToast(null), 3000)
+        const cr = captchaResolvRef.current
+        if (cr) {
+          consulter(cr.lien, cr.marques, cr.siteUrl)
+        }
+      }
+    } catch (e) {
+      setErreur(e.response?.data?.erreur || 'Erreur lors de la validation du CAPTCHA')
+    } finally {
+      setCaptchaLoading(false)
+    }
+  }, [])
 
   const [pdfResultats,  setPdfResultats]  = useState({})
   const [pdfLoading,    setPdfLoading]    = useState({})
@@ -451,6 +536,16 @@ export default function Explorateur() {
 
   // ── Re-fetcher quand les marques changent ────────────────────
 
+  // ── Recevoir l'URL depuis le Sidebar (historique) ──────────
+  const location = useLocation()
+  useEffect(() => {
+    if (location.state?.url) {
+      setUrlSaisie(location.state.url)
+      explorer(location.state.url)
+      window.history.replaceState({}, document.title)
+    }
+  }, [location.state])
+
   // ── Restaurer l'état après rafraîchissement ─────────────────
   const CACHE_VERSION = 2
   useEffect(() => {
@@ -558,6 +653,15 @@ export default function Explorateur() {
             </div>
           </div>
         )}
+
+        {captchaVisible && (
+          <CaptchaModal
+            siteKey={captchaSiteKey}
+            onSolve={soumettreCaptcha}
+            onClose={() => setCaptchaVisible(false)}
+            loading={captchaLoading}
+          />
+        )}
       </div>
 
       {(liens.length > 0 || loadingLiens) && (
@@ -642,44 +746,7 @@ export default function Explorateur() {
               )}
             </div>
 
-            {/* ── Historique ──────────────────────────────── */}
-            <div className={styles.historiqueSection}>
-              <button className={styles.historiqueToggle}
-                onClick={() => setShowHistorique(v => !v)}>
-                <Clock size={13}/>
-                <span>Historique ({historique.length})</span>
-                <span>{showHistorique ? '▲' : '▼'}</span>
-              </button>
-              {showHistorique && historique.length > 0 && (
-                <div className={styles.historiqueList}>
-                  {historique.map((h, i) => (
-                    <div key={i} className={styles.historiqueItem}
-                      title={`${h.titre}\n${h.url}\n${h.date}`}
-                      onClick={() => {
-                        setUrlSaisie(h.url)
-                        explorer(h.url)
-                      }}>
-                      <Globe size={11} className={styles.historiqueIcon}/>
-                      <div className={styles.historiqueInfo}>
-                        <span className={styles.historiqueTitre}>{h.titre || h.url}</span>
-                        <span className={styles.historiqueUrl}>{h.url}</span>
-                      </div>
-                      <span className={styles.historiqueDate}>{h.date}</span>
-                      <button className={styles.historiqueDel}
-                        onClick={e => { e.stopPropagation(); supprimerHistorique(h.url) }}
-                        title="Supprimer de l'historique">
-                        <X size={11}/>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {showHistorique && historique.length === 0 && (
-                <div className={styles.historiqueVide}>
-                  Aucun site visité
-                </div>
-              )}
-            </div>
+
           </aside>
 
           <section className={styles.contenu}>
@@ -934,33 +1001,7 @@ export default function Explorateur() {
         </div>
       )}
 
-      {/* Historique : visible en accueil et quand la sidebar est masquée */}
-      {liens.length === 0 && !loadingLiens && historique.length > 0 && (
-        <div className={styles.historiqueAccueil}>
-          <h3><Clock size={14}/> Historique des sites visités</h3>
-          <div className={styles.historiqueAccueilList}>
-            {historique.map((h, i) => (
-              <div key={i} className={styles.historiqueAccueilItem}
-                onClick={() => {
-                  setUrlSaisie(h.url)
-                  explorer(h.url)
-                }}>
-                <Globe size={14}/>
-                <div>
-                  <strong>{h.titre || h.url}</strong>
-                  <span>{h.url}</span>
-                </div>
-                <small>{h.date}</small>
-                <button className={styles.historiqueAccueilDel}
-                  onClick={e => { e.stopPropagation(); supprimerHistorique(h.url) }}
-                  title="Supprimer de l'historique">
-                  <X size={12}/>
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+
 
       {/* ── Modal confirmation Ajout ──────────────────────────── */}
       {modalAjout && (

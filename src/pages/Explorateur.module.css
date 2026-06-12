@@ -703,6 +703,32 @@
 .toast button:hover { opacity: 1; }
 .toastsuccess { background: #065f46; color: #d1fae5; border: 1px solid #059669; }
 .toastinfo { background: #1e3a5f; color: #dbeafe; border: 1px solid #3b82f6; }
+.captchaOverlay {
+  position: fixed; inset: 0; z-index: 2000;
+  background: rgba(0,0,0,.6);
+  display: flex; align-items: center; justify-content: center;
+}
+.captchaModal {
+  background: #1e293b; border-radius: 12px;
+  padding: 24px; min-width: 340px; max-width: 460px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.5);
+}
+.captchaHeader {
+  display: flex; justify-content: space-between;
+  align-items: center; margin-bottom: 12px;
+  font-weight: 600; font-size: 15px;
+}
+.captchaHeader button {
+  background: none; border: none; color: inherit; cursor: pointer; opacity: .5;
+  padding: 4px; border-radius: 4px;
+}
+.captchaHeader button:hover { opacity: 1; background: rgba(255,255,255,.1); }
+.captchaDesc { font-size: 13px; opacity: .7; margin-bottom: 16px; }
+.captchaWidget { margin-bottom: 12px; }
+.captchaLoading {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; color: #a78bfa; margin-top: 8px;
+}
 @keyframes toastIn {
   from { opacity: 0; transform: translateY(12px) scale(.95); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
