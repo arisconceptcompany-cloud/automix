@@ -5,7 +5,7 @@ import './index.css'
 import App from './App.jsx'
 
 if (!import.meta.env.DEV) {
-  axios.defaults.baseURL = 'https://auto.aris-cc.com:5005'
+  axios.defaults.baseURL = 'https://auto.aris-cc.com'
 }
 
 createRoot(document.getElementById('root')).render(

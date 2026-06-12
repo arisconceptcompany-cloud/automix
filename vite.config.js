@@ -11,7 +11,7 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'https://auto.aris-cc.com:5005',
+        target: 'https://auto.aris-cc.com',
         secure: false,
         changeOrigin: true,
         timeout: 600000,
