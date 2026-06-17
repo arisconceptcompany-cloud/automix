@@ -977,7 +977,7 @@ export default function Explorateur() {
                                     <input type="text"
                                       value={edits[`pc_${key}`] ?? ''}
                                       onChange={e => setEdits(prev => ({...prev, [`pc_${key}`]: e.target.value}))}
-                                      placeholder="Ex: 677€ Amazon"
+                                      placeholder="Entrer manuelle"
                                       className={styles.editInput}
                                       onClick={e => e.stopPropagation()}
                                       style={{maxWidth:140}}
