@@ -6,7 +6,7 @@ import {
   CheckSquare, Square
 } from 'lucide-react'
 import axios from 'axios'
-import { getCache, setCache } from '../cache'
+import { getCache, setCache, clearCache } from '../cache'
 import ProgressBar from '../components/ProgressBar'
 import styles from './Explorateur.module.css'
 
@@ -110,18 +110,83 @@ export default function Explorateur() {
   })()
 
   const [ajoutsEnCours, setAjoutsEnCours] = useState({})
+  const [edits, setEdits] = useState({})
 
   const [verifiees, setVerifiees] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem('categoriesVerifiees') || '[]')) }
     catch { return new Set() }
   })
+  const [filtreLien, setFiltreLien] = useState('')
+  const [erreur,     setErreur]     = useState(null)
+  const [toast,      setToast]      = useState(null)
+
+  // Clé de cache pour les produits
+  const cacheKeyProducts = useMemo(() => {
+    if (!siteInfo?.url || !urlSaisie) return null
+    return `explo_produits_${siteInfo.url}_${marquesActives.join('|')}`
+  }, [siteInfo?.url, urlSaisie, marquesActives])
+
+  // ── Fonctions de cache ───────────────────────────────────────
+  const restaurerDepuisCache = useCallback(() => {
+    if (!cacheKeyProducts) return
+
+    const fromMemory = getCache(cacheKeyProducts, 300000)
+    if (fromMemory?.produits?.length > 0) {
+      setProduits(fromMemory.produits)
+      setLoadingProd(false)
+      setToast({ message: '📋 Résultats chargés depuis la mémoire', type: 'info' })
+      setTimeout(() => setToast(null), 3000)
+      return
+    }
+
+    if (siteInfo?.url) {
+      const key = `explo_produits_local_${siteInfo.url}`
+      const saved = localStorage.getItem(key)
+      if (saved) {
+        try {
+          const produitsSaved = JSON.parse(saved)
+          if (produitsSaved && produitsSaved.length > 0) {
+            setProduits(produitsSaved)
+            setLoadingProd(false)
+            setToast({ message: '📋 Résultats restaurés depuis la mémoire persistante', type: 'info' })
+            setTimeout(() => setToast(null), 3000)
+          }
+        } catch (e) {}
+      }
+    }
+  }, [cacheKeyProducts, siteInfo?.url])
+
+  const sauvegarderDansCache = useCallback((nouveauxProduits) => {
+    if (!cacheKeyProducts || !siteInfo?.url) return
+
+    setCache(cacheKeyProducts, {
+      produits: nouveauxProduits,
+      timestamp: Date.now(),
+      url: siteInfo.url,
+      marques: marquesActives,
+      siteInfo: siteInfo
+    }, 300000)
+
+    const key = `explo_produits_local_${siteInfo.url}`
+    localStorage.setItem(key, JSON.stringify(nouveauxProduits))
+
+    setToast({ message: '💾 Résultats sauvegardés en mémoire', type: 'success' })
+    setTimeout(() => setToast(null), 2000)
+  }, [cacheKeyProducts, siteInfo, marquesActives])
+
   useEffect(() => {
     localStorage.setItem('categoriesVerifiees', JSON.stringify([...verifiees]))
   }, [verifiees])
 
-  const [filtreLien, setFiltreLien] = useState('')
-  const [erreur,     setErreur]     = useState(null)
-  const [toast,      setToast]      = useState(null)
+  useEffect(() => {
+    restaurerDepuisCache()
+  }, [restaurerDepuisCache])
+
+  useEffect(() => {
+    if (produits.length > 0 && siteInfo?.url && cacheKeyProducts) {
+      sauvegarderDansCache(produits)
+    }
+  }, [produits, siteInfo?.url, cacheKeyProducts, sauvegarderDansCache])
 
   // ── Modal d'ajout ─────────────────────────────────────────────
   const [modalAjout,   setModalAjout]   = useState(null)
@@ -266,7 +331,6 @@ export default function Explorateur() {
       if (res.data.succes) {
         setLoginStatus('ok'); setConnecte(true); setLoginForce(false)
         setLoginVisible(false); setErreur(null)
-        // Recharger les catégories après connexion (cache obsolète)
         explorer(urlSaisie, true)
       } else {
         setLoginStatus('err'); setErreur(res.data.message || 'Connexion échouée')
@@ -279,7 +343,7 @@ export default function Explorateur() {
   const urlRef = useRef(urlSaisie)
   useEffect(() => { urlRef.current = urlSaisie }, [urlSaisie])
 
-  const consulter = async (lien, marques, siteUrl) => {
+  const consulter = useCallback(async (lien, marques, siteUrl) => {
     if (cediSite && !connecte) {
       setLoginVisible(true)
       setToast({ message: '🔐 Connectez-vous d\'abord à votre compte CEDI', type: 'info' })
@@ -288,6 +352,16 @@ export default function Explorateur() {
     const site = siteUrl || urlRef.current
     const marquesFinal = marques || marquesActives
     setLienActif(lien); setProduits([]); setLoadingProd(true)
+
+    if (cacheKeyProducts && siteInfo?.url) {
+      const fromCache = getCache(cacheKeyProducts, 300000)
+      if (fromCache?.produits?.length > 0) {
+        setProduits(fromCache.produits)
+        setLoadingProd(false)
+        return
+      }
+    }
+
     try {
       const res = await axios.post('/api/explorateur/produits', {
         url:    lien.href.startsWith('javascript:') || lien.href === '#' ? site : lien.href,
@@ -309,10 +383,24 @@ export default function Explorateur() {
         setProduits([])
         return
       }
-      setProduits(res.data.produits || [])
+      const nouveauxProduits = res.data.produits || []
+      setProduits(nouveauxProduits)
+      if (cacheKeyProducts && siteInfo?.url) {
+        setCache(cacheKeyProducts, {
+          produits: nouveauxProduits,
+          timestamp: Date.now(),
+          url: siteInfo.url,
+          marques: marquesFinal,
+          siteInfo: siteInfo
+        })
+      }
+      if (siteInfo?.url) {
+        const key = `explo_produits_local_${siteInfo.url}`
+        localStorage.setItem(key, JSON.stringify(nouveauxProduits))
+      }
     } catch { setProduits([]) }
     finally { setLoadingProd(false) }
-  }
+  }, [cacheKeyProducts, siteInfo, marquesActives, cediSite, connecte, urlRef])
 
   const soumettreCaptcha = useCallback(async (token) => {
     if (!token) return
@@ -336,7 +424,7 @@ export default function Explorateur() {
     } finally {
       setCaptchaLoading(false)
     }
-  }, [])
+  }, [consulter])
 
   const [pdfResultats,  setPdfResultats]  = useState({})
   const [pdfLoading,    setPdfLoading]    = useState({})
@@ -376,7 +464,6 @@ export default function Explorateur() {
         site,
       })
       setToast({ message: `✅ ${r.data.mis_a_jour} produit(s) mis à jour${r.data.introuvables?.length ? ` (${r.data.introuvables.length} ignoré(s))` : ''}`, type: 'success' })
-      // Marquer les produits comme mis à jour
       setProduits(prev => prev.map(p =>
         a_mettre_a_jour.some(aj => aj.reference === p.reference)
           ? { ...p, _mis_a_jour: true }
@@ -423,9 +510,13 @@ export default function Explorateur() {
     setAjoutsEnCours(prev => ({ ...prev, [key]: 'loading' }))
     try {
       const site = detecterSite(urlRef.current)
+      const ecoVal = edits[`eco_${key}`]
+      const pcVal = edits[`pc_${key}`]
       await axios.post('/api/excel/ajouter-produit', {
         reference: produit.reference, nom: produit.nom,
         prix: produit.prix, site: site,
+        eco_part: ecoVal ? parseFloat(ecoVal) : null,
+        prix_comparer: pcVal || null,
       })
       setProduits(prev => prev.map(p =>
         (p.reference === produit.reference && p.nom === produit.nom)
@@ -443,13 +534,11 @@ export default function Explorateur() {
 
   const q = filtreLien.toLowerCase()
 
-  // Filtrer les liens produits (catégorie produit ou URL contenant des mots-clés)
   const liensProduits = liens.filter(l => {
     if (l.categorie === 'Produits / Catégories') return true
     if (l.type_produit) return true
     const href = (l.href || '').toLowerCase()
     const texte = (l.texte || '').toLowerCase()
-    // Inclure aussi les liens dont l'URL contient "pose-libre", "encastrable", etc.
     const motsCles = ['pose-libre', 'pose_libre', 'poselibre', 'pose libre', 'encastrable',
       'cuisiniere', 'piano-de-cuisson', 'four', 'table-cuisson', 'lave-linge',
       'seche-linge', 'lave-vaisselle', 'micro-onde', 'hotte', 'tiroir',
@@ -460,13 +549,10 @@ export default function Explorateur() {
     !q || l.texte.toLowerCase().includes(q) || l.href.toLowerCase().includes(q)
   )
 
-  // Détection automatique pose libre / encastrable
   const detecterCategorie = (lien) => {
-    // Utiliser le type détecté par le backend (visite des pages)
     if (lien.type_produit === 'pose_libre') return 'pose_libre'
     if (lien.type_produit === 'encastrable') return 'encastrable'
 
-    // Fallback : analyse URL + texte
     const href = (lien.href || '').toLowerCase()
     const texte = (lien.texte || '').toLowerCase()
     const cat = (lien.categorie || '').toLowerCase()
@@ -506,8 +592,6 @@ export default function Explorateur() {
     return null
   }
 
-
-  // Déduplication : supprimer les liens pointant vers la même page
   const dedupeLiens = (arr) => {
     const vus = new Set()
     return arr.filter(l => {
@@ -534,8 +618,6 @@ export default function Explorateur() {
     { nom: 'Non classé', liens: nonClasses },
   ]
 
-  // ── Re-fetcher quand les marques changent ────────────────────
-
   // ── Recevoir l'URL depuis le Sidebar (historique) ──────────
   const location = useLocation()
   useEffect(() => {
@@ -560,7 +642,6 @@ export default function Explorateur() {
     } catch {}
   }, [])
 
-  // ── Persister l'état (ignorer le 1er rendu pour ne pas écraser) ──
   const premierRendu = useRef(true)
   useEffect(() => {
     if (premierRendu.current) { premierRendu.current = false; return }
@@ -746,7 +827,6 @@ export default function Explorateur() {
               )}
             </div>
 
-
           </aside>
 
           <section className={styles.contenu}>
@@ -858,7 +938,15 @@ export default function Explorateur() {
                               </td>
                               <td className={styles.prix}>
                                 {p.eco_part != null ? `${parseFloat(p.eco_part).toFixed(2)} €` : (
-                                  p._dans_excel ? <span className={styles.badgeGris}>—</span> : '—'
+                                  p._dans_excel ? <span className={styles.badgeGris}>—</span> : (
+                                    <input type="number" step="0.01"
+                                      value={edits[`eco_${key}`] ?? ''}
+                                      onChange={e => setEdits(prev => ({...prev, [`eco_${key}`]: e.target.value}))}
+                                      placeholder="Eco part"
+                                      className={styles.editInput}
+                                      onClick={e => e.stopPropagation()}
+                                    />
+                                  )
                                 )}
                               </td>
                               <td>
@@ -879,15 +967,22 @@ export default function Explorateur() {
                                 </span>
                               </td>
                               <td className={styles.comparer}>
-                                {p.prix_comparer != null ? (
-                                  <span className={styles.comparerVal}>
-                                    {parseFloat(p.prix_comparer).toFixed(2)} €
-                                    {p.prix_comparer_merchant ? (
-                                      <span className={styles.comparerMarchand}> {p.prix_comparer_merchant}</span>
-                                    ) : ''}
-                                  </span>
+                                 {p.prix_comparer != null ? (
+                                   <span className={styles.comparerVal}>
+                                     {p.prix_comparer}
+                                   </span>
                                 ) : (
-                                  <span className={styles.badgeGris}>—</span>
+                                  <div style={{display:'flex', gap:4, alignItems:'center'}}>
+                                    <span className={styles.badgeGris}>—</span>
+                                    <input type="text"
+                                      value={edits[`pc_${key}`] ?? ''}
+                                      onChange={e => setEdits(prev => ({...prev, [`pc_${key}`]: e.target.value}))}
+                                      placeholder="Ex: 677€ Amazon"
+                                      className={styles.editInput}
+                                      onClick={e => e.stopPropagation()}
+                                      style={{maxWidth:140}}
+                                    />
+                                  </div>
                                 )}
                               </td>
                               <td>
@@ -1001,8 +1096,6 @@ export default function Explorateur() {
         </div>
       )}
 
-
-
       {/* ── Modal confirmation Ajout ──────────────────────────── */}
       {modalAjout && (
         <div className={styles.overlay} onClick={() => setModalAjout(null)}>
@@ -1019,6 +1112,7 @@ export default function Explorateur() {
                   {colonnesExcel.map((col, i) => {
                     let val = ''
                     const h = col.toUpperCase()
+                    const mKey = modalAjout.reference || modalAjout.nom
                     if (['REFERENCE','RÉFÉRENCE','REF','SKU','CODE'].includes(h))
                       val = modalAjout.reference || '—'
                     else if (['NOM','DESIGNATION','LIBELLE','DESCRIPTION','PRODUIT','ARTICLE'].includes(h))
@@ -1027,6 +1121,10 @@ export default function Explorateur() {
                       val = modalAjout.prix || '—'
                     else if (['CEDI','GPDIS','FINDIS','SOGAM'].includes(h))
                       val = modalAjout.prix || '—'
+                    else if (h.includes('ECO') && h.includes('PART'))
+                      val = edits[`eco_${mKey}`] || modalAjout.eco_part || '—'
+                    else if (h.includes('PRIX') && (h.includes('COMPAR') || h.includes('COMPARER')))
+                      val = edits[`pc_${mKey}`] || modalAjout.prix_comparer || '—'
                     else
                       val = '—'
                     return (

@@ -423,6 +423,17 @@
 .prodImg:hover { transform: scale(1.8); z-index: 10; position: relative; }
 .noImg { color: var(--text2); font-size: 11px; }
 
+/* ── Champ d'édition manuelle ────────────────────────────── */
+.editInput {
+  width: 100%; min-width: 60px;
+  padding: 3px 6px; font-size: 12px;
+  background: var(--bg3); border: 1px solid var(--border);
+  color: var(--text); border-radius: 5px;
+  outline: none; transition: border-color .15s;
+}
+.editInput:focus { border-color: var(--accent); }
+.editInput::placeholder { color: var(--text2); font-size: 11px; }
+
 /* ── Prix Comparer ───────────────────────────────────────── */
 .comparer { white-space: nowrap; }
 .comparerVal { font-weight: 700; color: #a855f7; white-space: nowrap; }
