@@ -181,7 +181,7 @@ export default function Excel() {
               <RefreshCw size={14} className={loading ? styles.spin : ''} /> Actualiser
             </button>
             <button className={styles.iconBtn} onClick={() => window.open('https://auto.aris-cc.com/api/excel/telecharger', '_blank')}>
-              <Download size={14} /> Télécharger
+              <Download size={14} /> Exporter
             </button>
             <button className={`${styles.iconBtn} ${styles.iconBtnDanger}`} onClick={supprimer}>
               <Trash2 size={14} /> Supprimer

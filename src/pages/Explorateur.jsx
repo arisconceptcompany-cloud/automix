@@ -489,9 +489,11 @@ export default function Explorateur() {
       setToast({ message: `"${produit.reference}" mis à jour`, type: 'success' })
       setTimeout(() => setToast(null), 3000)
     } catch (e) {
-      setErreur(e.response?.data?.erreur || 'Erreur mise à jour')
+      const msg = e.response?.data?.erreur || 'Erreur mise à jour'
+      setErreur(msg)
+      setToast({ message: `❌ ${msg}`, type: 'err' })
       setAjoutsEnCours(prev => ({ ...prev, [key]: 'err' }))
-      setTimeout(() => setAjoutsEnCours(prev => { const n = {...prev}; delete n[key]; return n }), 3000)
+      setTimeout(() => { setAjoutsEnCours(prev => { const n = {...prev}; delete n[key]; return n }); setToast(null) }, 4000)
     }
   }
 
@@ -526,9 +528,11 @@ export default function Explorateur() {
       setToast({ message: `"${produit.reference || produit.nom}" ajouté à l'Excel`, type: 'success' })
       setTimeout(() => setToast(null), 3000)
     } catch (e) {
-      setErreur(e.response?.data?.erreur || 'Erreur ajout')
+      const msg = e.response?.data?.erreur || 'Erreur ajout'
+      setErreur(msg)
+      setToast({ message: `❌ ${msg}`, type: 'err' })
       setAjoutsEnCours(prev => ({ ...prev, [key]: 'err' }))
-      setTimeout(() => setAjoutsEnCours(prev => { const n = {...prev}; delete n[key]; return n }), 3000)
+      setTimeout(() => { setAjoutsEnCours(prev => { const n = {...prev}; delete n[key]; return n }); setToast(null) }, 4000)
     }
   }
 
