@@ -1108,31 +1108,35 @@ export default function Explorateur() {
               <table className={styles.modalTable}>
                 <thead><tr><th>Colonne</th><th>Valeur</th></tr></thead>
                 <tbody>
-                  {colonnesExcel.map((col, i) => {
-                    let val = ''
-                    const h = col.toUpperCase()
+                  {(() => {
+                    const n = s => s.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9]/g, '')
+                    const match = (col, keywords) => {
+                      const nc = n(col)
+                      return keywords.some(k => nc.includes(n(k)) || n(k).includes(nc))
+                    }
                     const mKey = modalAjout.reference || modalAjout.nom
-                    if (['REFERENCE','RÉFÉRENCE','REF','SKU','CODE'].includes(h))
-                      val = modalAjout.reference || '—'
-                    else if (['NOM','DESIGNATION','LIBELLE','DESCRIPTION','PRODUIT','ARTICLE'].includes(h))
-                      val = modalAjout.nom || '—'
-                    else if (['PRIX','PRIX FACTURE','TARIF','TARIF DE BASE','PPI','COUT','COST','AMOUNT'].includes(h))
-                      val = modalAjout.prix || '—'
-                    else if (['CEDI','GPDIS','FINDIS','SOGAM'].includes(h))
-                      val = modalAjout.prix || '—'
-                    else if (h.includes('ECO') && h.includes('PART'))
-                      val = edits[`eco_${mKey}`] || modalAjout.eco_part || '—'
-                    else if (h.includes('PRIX') && (h.includes('COMPAR') || h.includes('COMPARER')))
-                      val = edits[`pc_${mKey}`] || modalAjout.prix_comparer || '—'
-                    else
-                      val = '—'
-                    return (
-                      <tr key={i}>
-                        <td className={styles.modalCol}>{col || `Colonne ${i+1}`}</td>
-                        <td className={styles.modalVal}>{val}</td>
-                      </tr>
-                    )
-                  })}
+                    return colonnesExcel.map((col, i) => {
+                      let val = '—'
+                      if (match(col, ['REFERENCE','REF','SKU','CODE']))
+                        val = modalAjout.reference || '—'
+                      else if (match(col, ['NOM','DESIGNATION','LIBELLE','DESCRIPTION','PRODUIT','ARTICLE']))
+                        val = modalAjout.nom || '—'
+                      else if (match(col, ['PRIX','TARIF','COUT','COST','AMOUNT','PRIXFACTURE']))
+                        val = modalAjout.prix || '—'
+                      else if (match(col, ['CEDI','GPDIS','FINDIS','SOGAM']))
+                        val = modalAjout.prix || '—'
+                      else if (n(col).includes('ECO') && n(col).includes('PART'))
+                        val = edits[`eco_${mKey}`] || modalAjout.eco_part || '—'
+                      else if (n(col).includes('PRIX') && (n(col).includes('COMPAR') || n(col).includes('COMPARER')))
+                        val = edits[`pc_${mKey}`] || modalAjout.prix_comparer || '—'
+                      return (
+                        <tr key={i}>
+                          <td className={styles.modalCol}>{col || `Colonne ${i+1}`}</td>
+                          <td className={styles.modalVal}>{val}</td>
+                        </tr>
+                      )
+                    })
+                  })()}
                 </tbody>
               </table>
             </div>
