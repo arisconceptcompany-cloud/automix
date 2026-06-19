@@ -180,9 +180,9 @@ export default function Excel() {
             <button className={styles.iconBtn} onClick={() => charger(true)} disabled={loading}>
               <RefreshCw size={14} className={loading ? styles.spin : ''} /> Actualiser
             </button>
-            <a className={styles.iconBtn} href="/api/excel/telecharger">
+            <button className={styles.iconBtn} onClick={() => window.open('/api/excel/telecharger', '_blank')}>
               <Download size={14} /> Télécharger
-            </a>
+            </button>
             <button className={`${styles.iconBtn} ${styles.iconBtnDanger}`} onClick={supprimer}>
               <Trash2 size={14} /> Supprimer
             </button>
