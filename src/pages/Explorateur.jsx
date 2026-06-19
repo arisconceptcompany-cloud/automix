@@ -679,11 +679,6 @@ export default function Explorateur() {
               <Lock size={14}/> {loginStatus === 'ok' ? 'Connecté' : 'Connexion'}
             </button>
           )}
-          <button className={styles.btnDownload}
-            onClick={() => window.open('/api/excel/telecharger', '_blank')}
-            title="Télécharger le fichier Excel">
-            ⬇️ Excel
-          </button>
         </div>
 
         {siteInfo && (
