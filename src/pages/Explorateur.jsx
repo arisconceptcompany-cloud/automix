@@ -218,7 +218,7 @@ export default function Explorateur() {
 
     Promise.all([
       axios.get('/api/historique').catch(() => ({ data: [] })),
-      cachedCols ? Promise.resolve(null) : axios.get('/api/excel/colonnes').catch(() => ({ data: { colonnes: ["REFERENCE","Nom","Prix"] } })),
+      axios.get('/api/excel/colonnes').catch(() => ({ data: { colonnes: ["REFERENCE","Nom","Prix"] } })),
     ]).then(([histRes, colsRes]) => {
       if (histRes) {
         const data = histRes.data || []
@@ -1109,13 +1109,24 @@ export default function Explorateur() {
                 <thead><tr><th>Colonne</th><th>Valeur</th></tr></thead>
                 <tbody>
                   {(() => {
-                    const n = s => s.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9]/g, '')
+                    const n = s => {
+                      if (!s) return ''
+                      let h = s.toUpperCase()
+                      if (/[\u00c0-\u00ff]/.test(h)) {
+                        try {
+                          const bytes = new Uint8Array(h.length)
+                          for (let j = 0; j < h.length; j++) bytes[j] = h.charCodeAt(j) & 0xFF
+                          h = new TextDecoder('utf-8').decode(bytes).toUpperCase()
+                        } catch {}
+                      }
+                      return h.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9]/g, '')
+                    }
                     const match = (col, keywords) => {
                       const nc = n(col)
                       return keywords.some(k => nc.includes(n(k)) || n(k).includes(nc))
                     }
                     const mKey = modalAjout.reference || modalAjout.nom
-                    return colonnesExcel.map((col, i) => {
+                    return colonnesExcel.filter(c => c && c.trim()).map((col, i) => {
                       let val = '—'
                       if (match(col, ['REFERENCE','REF','SKU','CODE']))
                         val = modalAjout.reference || '—'
