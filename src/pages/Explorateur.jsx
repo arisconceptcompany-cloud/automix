@@ -206,6 +206,9 @@ export default function Explorateur() {
   const [historique, setHistorique] = useState([])
 
   useEffect(() => {
+    const cachedCols = getCache('excel_colonnes', 60000)
+    if (cachedCols) setColonnesExcel(cachedCols)
+
     const cachedHist = localStorage.getItem('historique_data')
     if (cachedHist) {
       try {
@@ -213,8 +216,6 @@ export default function Explorateur() {
         if (Date.now() - ts < 60000) { setHistorique(data); return }
       } catch {}
     }
-    const cachedCols = getCache('excel_colonnes', 60000)
-    if (cachedCols) setColonnesExcel(cachedCols)
 
     Promise.all([
       axios.get('/api/historique').catch(() => ({ data: [] })),
