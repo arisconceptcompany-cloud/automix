@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
 import {
-  Globe, Search, Loader, ExternalLink, ChevronRight,
+  Globe, Search, Loader, ExternalLink, ChevronLeft, ChevronRight,
   Package, RefreshCw, Lock, Eye, EyeOff, LogIn, X, PlusCircle, Copy, CheckCircle,
   CheckSquare, Square
 } from 'lucide-react'
@@ -69,6 +69,7 @@ export default function Explorateur() {
   const [nouvelleMarque, setNouvelleMarque] = useState('')
   const [marquesDispos,  setMarquesDispos]  = useState(MARQUES_DISPONIBLES)
   const [showMarques,    setShowMarques]    = useState(false)
+  const [menuOuvert,    setMenuOuvert]    = useState(true)
 
   const [loginVisible,  setLoginVisible]  = useState(false)
   const [loginUrl,        setLoginUrl]        = useState('')
@@ -649,6 +650,7 @@ export default function Explorateur() {
       }
       if (saved.url) setUrlSaisie(saved.url)
       if (saved.marques) setMarquesActives(saved.marques)
+      if (saved.marquesDispos) setMarquesDispos(saved.marquesDispos)
     } catch {}
   }, [])
 
@@ -658,7 +660,7 @@ export default function Explorateur() {
     try {
       localStorage.setItem('explorateur_state', JSON.stringify({
         _v: CACHE_VERSION,
-        url: urlSaisie, marques: marquesActives, lienActif, siteInfo,
+        url: urlSaisie, marques: marquesActives, marquesDispos, lienActif, siteInfo,
         liens: urlSaisie ? liens : [],
       }))
     } catch {}
@@ -693,7 +695,7 @@ export default function Explorateur() {
             placeholder="https://www.monsite.com"
             onKeyDown={e => e.key === 'Enter' && explorer()} />
           <button className={styles.btnPrimary} onClick={() => explorer()} disabled={loadingLiens}>
-            {loadingLiens ? <><Loader size={14} className={styles.spin}/> Chargement...</> : <><Search size={14}/> Explorer</>}
+            {loadingLiens ? <><Loader size={14} className={styles.spin}/> Chargement...</> : <><Search size={14}/> Analyser</>}
           </button>
           {siteInfo && (
             <button className={styles.btnLogin + (loginStatus === 'ok' ? ' ' + styles.btnLoginOk : '')}
@@ -765,12 +767,18 @@ export default function Explorateur() {
       {(liens.length > 0 || loadingLiens) && (
         <div className={styles.layout}>
 
-          <aside className={styles.menu}>
+          <aside className={`${styles.menu}${!menuOuvert ? ' ' + styles.menuFerme : ''}`}>
             <div className={styles.menuTop}>
               <span>Catégories</span>
-              <button onClick={() => explorer(urlSaisie, true)} title="Recharger"><RefreshCw size={12}/></button>
+              <div style={{display:'flex', gap:4,alignItems:'center'}}>
+                <button onClick={() => explorer(urlSaisie, true)} title="Recharger"><RefreshCw size={12}/></button>
+                <button onClick={() => setMenuOuvert(v=>!v)} title={menuOuvert?'Réduire':'Développer'}>
+                  <ChevronLeft size={14} style={{transform:menuOuvert?'rotate(0deg)':'rotate(180deg)',transition:'transform .2s'}}/>
+                </button>
+              </div>
             </div>
 
+            {menuOuvert && (<>
             <div className={styles.marquesSection}>
               <button className={styles.marquesToggle} onClick={() => setShowMarques(v => !v)}>
                   🏷️ Marques {marquesActives.length > 0 ? `(${marquesActives.length} active${marquesActives.length > 1 ? 's' : ''})` : '(toutes)'}
@@ -843,7 +851,7 @@ export default function Explorateur() {
                 ))
               )}
             </div>
-
+            </> )}
           </aside>
 
           <section className={styles.contenu}>

@@ -7,7 +7,7 @@ import styles from './Sidebar.module.css'
 
 const nav = [
   { to: '/excel',       icon: FileSpreadsheet, label: 'Fichier Excel' },
-  { to: '/explorateur', icon: Compass,         label: 'Explorateur'   },
+  { to: '/explorateur', icon: Compass,         label: 'Analyseur'   },
 ]
 
 export default function Sidebar({ onToggle }) {
