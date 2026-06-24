@@ -515,11 +515,16 @@ export default function Explorateur() {
       const site = detecterSite(urlRef.current)
       const ecoVal = edits[`eco_${key}`]
       const pcVal = edits[`pc_${key}`]
+      const frais = detecterFrais(produit.nom)
+      const ecoPartValue = ecoVal !== undefined && ecoVal !== '' ? parseFloat(ecoVal) : 0
+      let miniCalcule = (parseFloat(produit.prix) + ecoPartValue + frais) * 1.2
+      if (site === 'gpdis') miniCalcule /= 0.98
       await axios.post('/api/excel/ajouter-produit', {
         reference: produit.reference, nom: produit.nom,
         prix: produit.prix, site: site,
         eco_part: ecoVal ? parseFloat(ecoVal) : null,
         prix_comparer: pcVal || null,
+        mini: Math.round(miniCalcule * 100) / 100,
       })
       setProduits(prev => prev.map(p =>
         (p.reference === produit.reference && p.nom === produit.nom)
@@ -658,6 +663,18 @@ export default function Explorateur() {
       }))
     } catch {}
   }, [urlSaisie, marquesActives, lienActif, siteInfo, liens])
+
+  const detecterFrais = (nom) => {
+    const n = (nom || '').toUpperCase()
+    const GRANDS = [
+      'REFRIGERATEUR', 'CONGELATEUR', 'CAVE A VIN', 'CAVE-A-VIN',
+      'LAVE LINGE', 'LAVE-LINGE', 'SECHE LINGE', 'SECHE-LINGE',
+      'LAVE VAISSELLE', 'LAVE-VAISSELLE', 'CUISINIERE', 'CUISIERE',
+      'PIANO DE CUISSON', 'PIANO-DE-CUISSON', 'FOUR',
+      'AMERICAIN', 'CONGELATEUR COFFRE', 'CONGELATEUR VERTICAL'
+    ]
+    return GRANDS.some(g => n.includes(g)) ? 80 : 60
+  }
 
   const couleur = (p) => {
     if (p._dans_excel === true)  return styles.rowJaune
@@ -954,11 +971,22 @@ export default function Explorateur() {
                                   {p.mini != null && (
                                     <span className={styles.miniExcel}>{parseFloat(p.mini).toFixed(2)} €</span>
                                   )}
-                                  {p.prix != null && p.eco_part != null && (
+                                  {p.prix != null && (p.eco_part != null || (edits[`eco_${key}`] !== undefined && edits[`eco_${key}`] !== '')) && (
                                     <span className={styles.miniSite}>
-                                      {(parseFloat(p.prix) + parseFloat(p.eco_part)) * 1.2 < parseFloat(p.mini || 999999)
-                                        ? '▲ ' : '▼ '}
-                                      {((parseFloat(p.prix) + parseFloat(p.eco_part)) * 1.2).toFixed(2)} €
+                                      {(() => {
+                                        const frais = detecterFrais(p.nom)
+                                        const ecoValue = edits[`eco_${key}`] !== undefined && edits[`eco_${key}`] !== ''
+                                          ? parseFloat(edits[`eco_${key}`])
+                                          : (p.eco_part != null ? parseFloat(p.eco_part) : 0)
+                                        let miniCalcule = (parseFloat(p.prix) + ecoValue + frais) * 1.2
+                                        if (p.site_excel === 'gpdis') miniCalcule /= 0.98
+                                        return (
+                                          <>
+                                            {miniCalcule < parseFloat(p.mini || 999999) ? '▲ ' : '▼ '}
+                                            {miniCalcule.toFixed(2)} €
+                                          </>
+                                        )
+                                      })()}
                                     </span>
                                   )}
                                   {p.mini == null && (p.prix == null || p.eco_part == null) && (
@@ -1141,6 +1169,16 @@ export default function Explorateur() {
                         val = edits[`eco_${mKey}`] || modalAjout.eco_part || '—'
                       else if (n(col).includes('PRIX') && (n(col).includes('COMPAR') || n(col).includes('COMPARER')))
                         val = edits[`pc_${mKey}`] || modalAjout.prix_comparer || '—'
+                      else if (n(col) === 'MINI')
+                        val = (() => {
+                          const ecoV = edits[`eco_${mKey}`] !== undefined && edits[`eco_${mKey}`] !== ''
+                            ? parseFloat(edits[`eco_${mKey}`])
+                            : (modalAjout.eco_part != null ? parseFloat(modalAjout.eco_part) : 0)
+                          const fraisM = detecterFrais(modalAjout.nom)
+                          let miniM = (parseFloat(modalAjout.prix) + ecoV + fraisM) * 1.2
+                          if (detecterSite(urlRef.current) === 'gpdis') miniM /= 0.98
+                          return miniM.toFixed(2) + ' €'
+                        })()
                       return (
                         <tr key={i}>
                           <td className={styles.modalCol}>{col || `Colonne ${i+1}`}</td>
