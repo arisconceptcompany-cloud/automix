@@ -353,16 +353,18 @@ export default function Explorateur() {
     }
     const site = siteUrl || urlRef.current
     const marquesFinal = marques || marquesActives
-    setLienActif(lien); setProduits([]); setLoadingProd(true)
+    setLienActif(lien)
 
+    let hasCached = false
     if (cacheKeyProducts && siteInfo?.url) {
       const fromCache = getCache(cacheKeyProducts, 300000)
       if (fromCache?.produits?.length > 0) {
         setProduits(fromCache.produits)
-        setLoadingProd(false)
-        return
+        hasCached = true
       }
     }
+
+    if (!hasCached) { setProduits([]); setLoadingProd(true) }
 
     try {
       const res = await axios.post('/api/explorateur/produits', {
@@ -374,7 +376,7 @@ export default function Explorateur() {
         setConnecte(false)
         setLoginVisible(true)
         setErreur(res.data.message || 'Connexion CEDI requise')
-        setProduits([])
+        if (!hasCached) setProduits([])
         return
       }
       if (res.data.captcha_required) {
@@ -382,7 +384,7 @@ export default function Explorateur() {
         setCaptchaVisible(true)
         setCaptchaResolv({ lien, marques: marquesFinal, siteUrl: site })
         captchaResolvRef.current = { lien, marques: marquesFinal, siteUrl: site }
-        setProduits([])
+        if (!hasCached) setProduits([])
         return
       }
       const nouveauxProduits = res.data.produits || []
@@ -400,7 +402,7 @@ export default function Explorateur() {
         const key = `explo_produits_local_${siteInfo.url}`
         localStorage.setItem(key, JSON.stringify(nouveauxProduits))
       }
-    } catch { setProduits([]) }
+    } catch { if (!hasCached) setProduits([]) }
     finally { setLoadingProd(false) }
   }, [cacheKeyProducts, siteInfo, marquesActives, cediSite, connecte, urlRef])
 
