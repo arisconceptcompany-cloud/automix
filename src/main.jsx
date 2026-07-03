@@ -7,6 +7,7 @@ import App from './App.jsx'
 if (!import.meta.env.DEV) {
   axios.defaults.baseURL = 'https://auto.aris-cc.com'
 }
+axios.defaults.withCredentials = true
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

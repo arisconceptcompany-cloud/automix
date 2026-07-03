@@ -97,6 +97,14 @@ export default function Excel() {
     }
   }
 
+  // ── Rafraîchir après upload d'un autre utilisateur ──────
+  useEffect(() => {
+    const interval = setInterval(() => {
+      charger(true)
+    }, 60000)
+    return () => clearInterval(interval)
+  }, [])
+
   // ── Colonnes à afficher (dédupliquées) ───────────────────
   const cols = colonnes.length > 0
     ? colonnes
