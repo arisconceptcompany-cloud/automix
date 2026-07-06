@@ -910,6 +910,8 @@ export default function Explorateur() {
                         <col className={styles.colPhoto}/>
                         <col className={styles.colRef}/>
                         <col className={styles.colEan}/>
+                        <col className={styles.colFamille}/>
+                        <col className={styles.colSousFamille}/>
                         <col className={styles.colNom}/>
                         <col className={styles.colDispo}/>
                         <col className={styles.colPrixExcel}/>
@@ -921,7 +923,7 @@ export default function Explorateur() {
                         <col className={styles.colStatut}/>
                       </colgroup>
                       <thead>
-                        <tr><th>#</th><th>Photo</th><th>Réf.</th><th>EAN</th><th>Nom</th><th>Disponibilité</th><th>Prix Excel</th><th>Prix Site</th><th>Eco Part</th><th>Mini</th><th>Px Comparer</th><th>PDF</th><th>Statut</th></tr>
+                        <tr><th>#</th><th>Photo</th><th>Réf.</th><th>EAN13</th><th>Famille</th><th>Sous-famille</th><th>Nom</th><th>Disponibilité</th><th>Prix Excel</th><th>Prix Site</th><th>Eco Part</th><th>Mini</th><th>Px Comparer</th><th>PDF</th><th>Statut</th></tr>
                       </thead>
                       <tbody>
                         {produitsFiltres.map((p, i) => {
@@ -939,7 +941,9 @@ export default function Explorateur() {
                                 }
                               </td>
                               <td><code className={styles.ref}>{p.reference || '—'}</code></td>
-                              <td><span className={styles.ean}>{p.ean || '—'}</span></td>
+                              <td><span className={styles.ean}>{p.ean13 || '—'}</span></td>
+                              <td><span className={styles.famille}>{p.famille || '—'}</span></td>
+                              <td><span className={styles.sousFamille}>{p.sous_famille || '—'}</span></td>
                               <td>{p.nom || '—'}</td>
                               <td><span className={styles.dispo}>{p.disponibilite || '—'}</span></td>
                               <td>
