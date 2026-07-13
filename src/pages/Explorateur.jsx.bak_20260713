@@ -1020,27 +1020,15 @@ export default function Explorateur() {
                                 )}
                               </td>
                               <td className={styles.prix}>
-                                {(() => {
-                                  const ecoSite = edits[`eco_${key}`] !== undefined && edits[`eco_${key}`] !== ''
-                                    ? parseFloat(edits[`eco_${key}`])
-                                    : (p.eco_part != null ? parseFloat(p.eco_part) : null)
-                                  const ecoExcel = p.eco_part_excel != null ? parseFloat(p.eco_part_excel) : null
-                                  if (ecoSite != null && ecoExcel != null) {
-                                    return (
-                                      <span>
-                                        <span style={{color:'#22c55e', fontWeight:700}} title="Eco-part Excel">{ecoExcel.toFixed(2)} €</span>
-                                        <span style={{margin:'0 3px', opacity:.4}}> / </span>
-                                        <span style={{color:'#f97316', fontWeight:700}} title="Eco-part site">{ecoSite.toFixed(2)} €</span>
-                                      </span>
-                                    )
-                                  } else if (ecoSite != null) {
-                                    return <span style={{color:'#f97316', fontWeight:700}}>{ecoSite.toFixed(2)} €</span>
-                                  } else if (ecoExcel != null) {
-                                    return <span style={{color:'#22c55e', fontWeight:700}}>{ecoExcel.toFixed(2)} €</span>
-                                  }
-                                  return null
-                                })()}
-                                {p.eco_part == null && p.eco_part_excel == null && (
+                                {p.eco_part != null ? (
+                                  p.eco_part_excel != null && parseFloat(p.eco_part) !== parseFloat(p.eco_part_excel) ? (
+                                    <span style={{color:'#f97316', fontWeight:700}} title={`Excel: ${parseFloat(p.eco_part_excel).toFixed(2)} €`}>
+                                      {parseFloat(p.eco_part).toFixed(2)} € <span style={{fontSize:10,opacity:.7}}>(Excel: {parseFloat(p.eco_part_excel).toFixed(2)} €)</span>
+                                    </span>
+                                  ) : (
+                                    <span>{`${parseFloat(p.eco_part).toFixed(2)} €`}</span>
+                                  )
+                                ) : (
                                   p._dans_excel ? <span className={styles.badgeGris}>—</span> : (
                                     <input type="number" step="0.01"
                                       value={edits[`eco_${key}`] ?? ''}
@@ -1252,22 +1240,14 @@ export default function Explorateur() {
                       else if (match(col, ['CEDI','GPDIS','FINDIS','SOGAM']))
                         val = modalAjout.prix || '—'
                       else if (n(col).includes('ECO') && n(col).includes('PART')) {
-                        const ecoSite = edits[`eco_${mKey}`] !== undefined && edits[`eco_${mKey}`] !== ''
-                          ? parseFloat(edits[`eco_${mKey}`])
-                          : (modalAjout.eco_part != null ? parseFloat(modalAjout.eco_part) : null)
-                        const ecoExcel = modalAjout.eco_part_excel != null ? parseFloat(modalAjout.eco_part_excel) : null
-                        if (ecoSite != null && ecoExcel != null) {
-                          val = <span>
-                            <span style={{color:'#22c55e', fontWeight:700}} title="Eco-part Excel">{ecoExcel.toFixed(2)} €</span>
-                            <span style={{margin:'0 3px', opacity:.4}}> / </span>
-                            <span style={{color:'#f97316', fontWeight:700}} title="Eco-part site">{ecoSite.toFixed(2)} €</span>
+                        const ecoSite = edits[`eco_${mKey}`] || modalAjout.eco_part
+                        const ecoExcel = modalAjout.eco_part_excel
+                        if (ecoSite && ecoExcel && parseFloat(ecoSite) !== parseFloat(ecoExcel)) {
+                          val = <span style={{color:'#f97316',fontWeight:700}} title={`Excel: ${parseFloat(ecoExcel).toFixed(2)} €`}>
+                            {parseFloat(ecoSite).toFixed(2)} € <span style={{fontSize:10,opacity:.7}}>(Excel: {parseFloat(ecoExcel).toFixed(2)} €)</span>
                           </span>
-                        } else if (ecoSite != null) {
-                          val = <span style={{color:'#f97316', fontWeight:700}}>{ecoSite.toFixed(2)} €</span>
-                        } else if (ecoExcel != null) {
-                          val = <span style={{color:'#22c55e', fontWeight:700}}>{ecoExcel.toFixed(2)} €</span>
                         } else {
-                          val = '—'
+                          val = ecoSite || '—'
                         }
                       }
                       else if (n(col).includes('PRIMO') || (n(col).includes('PRIX') && (n(col).includes('COMPAR') || n(col).includes('COMPARER'))))
