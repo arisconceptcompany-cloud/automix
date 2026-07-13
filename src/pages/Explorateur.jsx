@@ -1020,7 +1020,15 @@ export default function Explorateur() {
                                 )}
                               </td>
                               <td className={styles.prix}>
-                                {p.eco_part != null ? `${parseFloat(p.eco_part).toFixed(2)} €` : (
+                                {p.eco_part != null ? (
+                                  p.eco_part_excel != null && parseFloat(p.eco_part) !== parseFloat(p.eco_part_excel) ? (
+                                    <span style={{color:'#f97316', fontWeight:700}} title={`Excel: ${parseFloat(p.eco_part_excel).toFixed(2)} €`}>
+                                      {parseFloat(p.eco_part).toFixed(2)} € <span style={{fontSize:10,opacity:.7}}>(Excel: {parseFloat(p.eco_part_excel).toFixed(2)} €)</span>
+                                    </span>
+                                  ) : (
+                                    <span>{`${parseFloat(p.eco_part).toFixed(2)} €`}</span>
+                                  )
+                                ) : (
                                   p._dans_excel ? <span className={styles.badgeGris}>—</span> : (
                                     <input type="number" step="0.01"
                                       value={edits[`eco_${key}`] ?? ''}
@@ -1231,8 +1239,17 @@ export default function Explorateur() {
                         val = modalAjout.prix || '—'
                       else if (match(col, ['CEDI','GPDIS','FINDIS','SOGAM']))
                         val = modalAjout.prix || '—'
-                      else if (n(col).includes('ECO') && n(col).includes('PART'))
-                        val = edits[`eco_${mKey}`] || modalAjout.eco_part || '—'
+                      else if (n(col).includes('ECO') && n(col).includes('PART')) {
+                        const ecoSite = edits[`eco_${mKey}`] || modalAjout.eco_part
+                        const ecoExcel = modalAjout.eco_part_excel
+                        if (ecoSite && ecoExcel && parseFloat(ecoSite) !== parseFloat(ecoExcel)) {
+                          val = <span style={{color:'#f97316',fontWeight:700}} title={`Excel: ${parseFloat(ecoExcel).toFixed(2)} €`}>
+                            {parseFloat(ecoSite).toFixed(2)} € <span style={{fontSize:10,opacity:.7}}>(Excel: {parseFloat(ecoExcel).toFixed(2)} €)</span>
+                          </span>
+                        } else {
+                          val = ecoSite || '—'
+                        }
+                      }
                       else if (n(col).includes('PRIMO') || (n(col).includes('PRIX') && (n(col).includes('COMPAR') || n(col).includes('COMPARER'))))
                         val = edits[`pc_${mKey}`] || modalAjout.prix_comparer || '—'
                       else if (n(col) === 'MINI')
