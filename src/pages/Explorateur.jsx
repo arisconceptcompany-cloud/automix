@@ -528,6 +528,11 @@ export default function Explorateur() {
         eco_part: ecoVal ? parseFloat(ecoVal) : null,
         prix_comparer: pcVal || null,
         mini: Math.round(miniCalcule * 100) / 100,
+        ean13: produit.ean13 || null,
+        famille: produit.famille || null,
+        sous_famille: produit.sous_famille || null,
+        marque: produit.marque || null,
+        disponibilite: produit.disponibilite || null,
       })
       setProduits(prev => prev.map(p =>
         (p.reference === produit.reference && p.nom === produit.nom)
@@ -1197,6 +1202,16 @@ export default function Explorateur() {
                           if (detecterSite(urlRef.current) === 'gpdis') miniM /= 0.98
                           return miniM.toFixed(2) + ' €'
                         })()
+                      else if (n(col).includes('EAN') || n(col) === 'GENCOD')
+                        val = modalAjout.ean13 || '—'
+                      else if (n(col) === 'FAMILLE' || n(col) === 'CATEGORIE' || n(col) === 'CATEGORY')
+                        val = modalAjout.famille || '—'
+                      else if (n(col).includes('SOUSFAMILLE') || n(col).includes('SOUS-FAMILLE') || n(col).includes('SOUS_FAMILLE'))
+                        val = modalAjout.sous_famille || '—'
+                      else if (n(col).includes('MARQUE') || n(col).includes('BRAND') || n(col).includes('MANUFACTURER'))
+                        val = modalAjout.marque || '—'
+                      else if (n(col).includes('DISPO') || n(col) === 'ETAT' || n(col) === 'STOCK' || n(col) === 'STATUS')
+                        val = modalAjout.disponibilite || '—'
                       return (
                         <tr key={i}>
                           <td className={styles.modalCol}>{col || `Colonne ${i+1}`}</td>
