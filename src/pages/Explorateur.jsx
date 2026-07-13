@@ -387,7 +387,14 @@ export default function Explorateur() {
         if (!hasCached) setProduits([])
         return
       }
-      const nouveauxProduits = res.data.produits || []
+      const nouveauxProduits = (res.data.produits || []).map(p => {
+        const refsExcel = res.data.refs_existantes || []
+        const refKey = (p.reference || '').toUpperCase().trim()
+        if (refKey && refKey !== '—' && refsExcel.includes(refKey)) {
+          return { ...p, _dans_excel: true }
+        }
+        return { ...p, _dans_excel: p._dans_excel ?? false }
+      })
       setProduits(nouveauxProduits)
       if (cacheKeyProducts && siteInfo?.url) {
         setCache(cacheKeyProducts, {
@@ -519,14 +526,16 @@ export default function Explorateur() {
       const ecoVal = edits[`eco_${key}`]
       const pcVal = edits[`pc_${key}`]
       const frais = detecterFrais(produit.nom)
-      const ecoPartValue = ecoVal !== undefined && ecoVal !== '' ? parseFloat(ecoVal) : 0
-      let miniCalcule = (parseFloat(produit.prix) + ecoPartValue + frais) * 1.2
+      const ecoPartFinal = (ecoVal !== undefined && ecoVal !== '') ? parseFloat(ecoVal) : (parseFloat(produit.eco_part) || null)
+      const prixCoparFinal = pcVal || produit.prix_comparer || null
+      const ecoPartForCalc = (ecoVal !== undefined && ecoVal !== '') ? parseFloat(ecoVal) : (parseFloat(produit.eco_part) || 0)
+      let miniCalcule = (parseFloat(produit.prix) + ecoPartForCalc + frais) * 1.2
       if (site === 'gpdis') miniCalcule /= 0.98
       await axios.post('/api/excel/ajouter-produit', {
         reference: produit.reference, nom: produit.nom,
         prix: produit.prix, site: site,
-        eco_part: ecoVal ? parseFloat(ecoVal) : null,
-        prix_comparer: pcVal || null,
+        eco_part: ecoPartFinal,
+        prix_comparer: prixCoparFinal,
         mini: Math.round(miniCalcule * 100) / 100,
         ean13: produit.ean13 || null,
         famille: produit.famille || null,
@@ -534,19 +543,53 @@ export default function Explorateur() {
         marque: produit.marque || null,
         disponibilite: produit.disponibilite || null,
       })
-      setProduits(prev => prev.map(p =>
+      const majProduits = prev => prev.map(p =>
         (p.reference === produit.reference && p.nom === produit.nom)
           ? { ...p, _dans_excel: true } : p
-      ))
+      )
+      setProduits(majProduits)
+      if (cacheKeyProducts && siteInfo?.url) {
+        const cached = getCache(cacheKeyProducts, 300000)
+        if (cached?.produits) {
+          const updated = cached.produits.map(p =>
+            (p.reference === produit.reference && p.nom === produit.nom)
+              ? { ...p, _dans_excel: true } : p
+          )
+          setCache(cacheKeyProducts, { ...cached, produits: updated })
+          localStorage.setItem(`explo_produits_local_${siteInfo.url}`, JSON.stringify(updated))
+        }
+      }
       setAjoutsEnCours(prev => ({ ...prev, [key]: 'done' }))
       setToast({ message: `"${produit.reference || produit.nom}" ajouté à l'Excel`, type: 'success' })
       setTimeout(() => setToast(null), 3000)
     } catch (e) {
       const msg = e.response?.data?.erreur || 'Erreur ajout'
-      setErreur(msg)
-      setToast({ message: `❌ ${msg}`, type: 'err' })
-      setAjoutsEnCours(prev => ({ ...prev, [key]: 'err' }))
-      setTimeout(() => { setAjoutsEnCours(prev => { const n = {...prev}; delete n[key]; return n }); setToast(null) }, 4000)
+      if (e.response?.status === 409 && msg.includes('existe déjà')) {
+        const majProduits = prev => prev.map(p =>
+          (p.reference === produit.reference && p.nom === produit.nom)
+            ? { ...p, _dans_excel: true } : p
+        )
+        setProduits(majProduits)
+        if (cacheKeyProducts && siteInfo?.url) {
+          const cached = getCache(cacheKeyProducts, 300000)
+          if (cached?.produits) {
+            const updated = cached.produits.map(p =>
+              (p.reference === produit.reference && p.nom === produit.nom)
+                ? { ...p, _dans_excel: true } : p
+            )
+            setCache(cacheKeyProducts, { ...cached, produits: updated })
+            localStorage.setItem(`explo_produits_local_${siteInfo.url}`, JSON.stringify(updated))
+          }
+        }
+        setAjoutsEnCours(prev => ({ ...prev, [key]: 'done' }))
+        setToast({ message: `"${produit.reference || produit.nom}" est déjà dans l'Excel`, type: 'success' })
+        setTimeout(() => setToast(null), 3000)
+      } else {
+        setErreur(msg)
+        setToast({ message: `❌ ${msg}`, type: 'err' })
+        setAjoutsEnCours(prev => ({ ...prev, [key]: 'err' }))
+        setTimeout(() => { setAjoutsEnCours(prev => { const n = {...prev}; delete n[key]; return n }); setToast(null) }, 4000)
+      }
     }
   }
 
@@ -1190,7 +1233,7 @@ export default function Explorateur() {
                         val = modalAjout.prix || '—'
                       else if (n(col).includes('ECO') && n(col).includes('PART'))
                         val = edits[`eco_${mKey}`] || modalAjout.eco_part || '—'
-                      else if (n(col).includes('PRIX') && (n(col).includes('COMPAR') || n(col).includes('COMPARER')))
+                      else if (n(col).includes('PRIMO') || (n(col).includes('PRIX') && (n(col).includes('COMPAR') || n(col).includes('COMPARER'))))
                         val = edits[`pc_${mKey}`] || modalAjout.prix_comparer || '—'
                       else if (n(col) === 'MINI')
                         val = (() => {
@@ -1204,7 +1247,7 @@ export default function Explorateur() {
                         })()
                       else if (n(col).includes('EAN') || n(col) === 'GENCOD')
                         val = modalAjout.ean13 || '—'
-                      else if (n(col) === 'FAMILLE' || n(col) === 'CATEGORIE' || n(col) === 'CATEGORY')
+                      else if (n(col).includes('FAMILLE') || n(col) === 'CATEGORIE' || n(col) === 'CATEGORY')
                         val = modalAjout.famille || '—'
                       else if (n(col).includes('SOUSFAMILLE') || n(col).includes('SOUS-FAMILLE') || n(col).includes('SOUS_FAMILLE'))
                         val = modalAjout.sous_famille || '—'
