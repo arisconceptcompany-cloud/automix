@@ -5,7 +5,7 @@ import { useAuth } from '../AuthContext'
 import styles from './Auth.module.css'
 
 export default function Auth() {
-  const { login, register, user } = useAuth()
+  const { login, register, user, logout } = useAuth()
   const navigate = useNavigate()
 
   const [mode, setMode] = useState('login')

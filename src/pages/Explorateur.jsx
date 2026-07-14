@@ -993,7 +993,12 @@ export default function Explorateur() {
                               <td><span className={styles.famille}>{p.famille || '—'}</span></td>
                               <td><span className={styles.sousFamille}>{p.sous_famille || '—'}</span></td>
                               <td>{p.nom || '—'}</td>
-                              <td><span className={styles.dispo}>{p.disponibilite || '—'}</span></td>
+                              <td><span className={styles.dispo} title={p.stock_depots || ''} style={
+                                p.disponibilite === 'En stock' || p.disponibilite === 'Disponible' ? {color:'#22c55e', fontWeight:700} :
+                                p.disponibilite === 'Sur commande' ? {color:'#eab308', fontWeight:700} :
+                                p.disponibilite === 'Indisponible' || p.disponibilite === 'Produit arrêté' || p.disponibilite === 'Non disponible' ? {color:'#ef4444', fontWeight:700} :
+                                {}
+                              }>{p.disponibilite || '—'}</span></td>
                               <td>
                                 {p.excel_prices && Object.keys(p.excel_prices).length > 0 ? (
                                   <span className={styles.prixDual}>
