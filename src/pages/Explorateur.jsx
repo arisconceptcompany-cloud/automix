@@ -526,9 +526,9 @@ export default function Explorateur() {
       const ecoVal = edits[`eco_${key}`]
       const pcVal = edits[`pc_${key}`]
       const frais = detecterFrais(produit.nom)
-      const ecoPartFinal = (ecoVal !== undefined && ecoVal !== '') ? parseFloat(ecoVal) : (parseFloat(produit.eco_part) || null)
+      const ecoPartFinal = (ecoVal !== undefined && ecoVal !== '') ? parseFloat(ecoVal) : (parseFloat(produit.eco_part_site) || parseFloat(produit.eco_part) || null)
       const prixCoparFinal = pcVal || produit.prix_comparer || null
-      const ecoPartForCalc = (ecoVal !== undefined && ecoVal !== '') ? parseFloat(ecoVal) : (parseFloat(produit.eco_part) || 0)
+      const ecoPartForCalc = (ecoVal !== undefined && ecoVal !== '') ? parseFloat(ecoVal) : (parseFloat(produit.eco_part_site) || parseFloat(produit.eco_part) || 0)
       let miniCalcule = (parseFloat(produit.prix) + ecoPartForCalc + frais) * 1.2
       if (site === 'gpdis') miniCalcule /= 0.98
       await axios.post('/api/excel/ajouter-produit', {
@@ -1023,8 +1023,8 @@ export default function Explorateur() {
                                 {(() => {
                                   const ecoSite = edits[`eco_${key}`] !== undefined && edits[`eco_${key}`] !== ''
                                     ? parseFloat(edits[`eco_${key}`])
-                                    : (p.eco_part != null ? parseFloat(p.eco_part) : null)
-                                  const ecoExcel = p.eco_part_excel != null ? parseFloat(p.eco_part_excel) : null
+                                    : (p.eco_part_site != null ? parseFloat(p.eco_part_site) : null)
+                                  const ecoExcel = p.eco_part != null ? parseFloat(p.eco_part) : null
                                   if (ecoSite != null && ecoExcel != null) {
                                     return (
                                       <span>
@@ -1040,7 +1040,7 @@ export default function Explorateur() {
                                   }
                                   return null
                                 })()}
-                                {p.eco_part == null && p.eco_part_excel == null && (
+                                {p.eco_part_site == null && p.eco_part == null && (
                                   p._dans_excel ? <span className={styles.badgeGris}>—</span> : (
                                     <input type="number" step="0.01"
                                       value={edits[`eco_${key}`] ?? ''}
@@ -1057,13 +1057,14 @@ export default function Explorateur() {
                                   {p.mini != null && (
                                     <span className={styles.miniExcel}>{parseFloat(p.mini).toFixed(2)} €</span>
                                   )}
-                                  {p.prix != null && (p.eco_part != null || (edits[`eco_${key}`] !== undefined && edits[`eco_${key}`] !== '')) && (
+                                  {p.prix != null && (p.eco_part_site != null || p.eco_part != null || (edits[`eco_${key}`] !== undefined && edits[`eco_${key}`] !== '')) && (
                                     <span className={styles.miniSite}>
                                       {(() => {
                                         const frais = detecterFrais(p.nom)
                                         const ecoValue = edits[`eco_${key}`] !== undefined && edits[`eco_${key}`] !== ''
                                           ? parseFloat(edits[`eco_${key}`])
-                                          : (p.eco_part != null ? parseFloat(p.eco_part) : 0)
+                                          : (p.eco_part_site != null ? parseFloat(p.eco_part_site)
+                                            : (p.eco_part != null ? parseFloat(p.eco_part) : 0))
                                         let miniCalcule = (parseFloat(p.prix) + ecoValue + frais) * 1.2
                                         if (p.site_excel === 'gpdis') miniCalcule /= 0.98
                                         return (
@@ -1075,7 +1076,7 @@ export default function Explorateur() {
                                       })()}
                                     </span>
                                   )}
-                                  {p.mini == null && (p.prix == null || p.eco_part == null) && (
+                                  {p.mini == null && (p.prix == null || (p.eco_part == null && p.eco_part_site == null)) && (
                                     p._dans_excel ? <span className={styles.badgeGris}>—</span> : '—'
                                   )}
                                 </span>
@@ -1254,8 +1255,8 @@ export default function Explorateur() {
                       else if (n(col).includes('ECO') && n(col).includes('PART')) {
                         const ecoSite = edits[`eco_${mKey}`] !== undefined && edits[`eco_${mKey}`] !== ''
                           ? parseFloat(edits[`eco_${mKey}`])
-                          : (modalAjout.eco_part != null ? parseFloat(modalAjout.eco_part) : null)
-                        const ecoExcel = modalAjout.eco_part_excel != null ? parseFloat(modalAjout.eco_part_excel) : null
+                          : (modalAjout.eco_part_site != null ? parseFloat(modalAjout.eco_part_site) : null)
+                        const ecoExcel = modalAjout.eco_part != null ? parseFloat(modalAjout.eco_part) : null
                         if (ecoSite != null && ecoExcel != null) {
                           val = <span>
                             <span style={{color:'#22c55e', fontWeight:700}} title="Eco-part Excel">{ecoExcel.toFixed(2)} €</span>
@@ -1276,7 +1277,8 @@ export default function Explorateur() {
                         val = (() => {
                           const ecoV = edits[`eco_${mKey}`] !== undefined && edits[`eco_${mKey}`] !== ''
                             ? parseFloat(edits[`eco_${mKey}`])
-                            : (modalAjout.eco_part != null ? parseFloat(modalAjout.eco_part) : 0)
+                            : (modalAjout.eco_part_site != null ? parseFloat(modalAjout.eco_part_site)
+                              : (modalAjout.eco_part != null ? parseFloat(modalAjout.eco_part) : 0))
                           const fraisM = detecterFrais(modalAjout.nom)
                           let miniM = (parseFloat(modalAjout.prix) + ecoV + fraisM) * 1.2
                           if (detecterSite(urlRef.current) === 'gpdis') miniM /= 0.98
