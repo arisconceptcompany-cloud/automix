@@ -466,38 +466,89 @@ export default function Explorateur() {
       setTimeout(() => setToast(null), 3000)
       return
     }
-    const site = a_mettre_a_jour[0].site_excel || 'cedi'
     setLotMajLoading(true)
     setToast({ message: `Mise à jour de ${a_mettre_a_jour.length} produit(s)...`, type: 'info' })
-    try {
-      const r = await axios.post('/api/excel/mettre-a-jour-lot', {
-        produits: a_mettre_a_jour.map(p => ({ reference: p.reference, nom: p.nom, prix: p.prix })),
-        site,
-      })
-      setToast({ message: `✅ ${r.data.mis_a_jour} produit(s) mis à jour${r.data.introuvables?.length ? ` (${r.data.introuvables.length} ignoré(s))` : ''}`, type: 'success' })
-      setProduits(prev => prev.map(p =>
-        a_mettre_a_jour.some(aj => aj.reference === p.reference)
-          ? { ...p, _mis_a_jour: true }
-          : p
-      ))
-      setTimeout(() => setToast(null), 5000)
-    } catch (e) {
-      setErreur(e.response?.data?.erreur || 'Erreur mise à jour groupée')
+    let ok = 0, fail = 0
+    for (const p of a_mettre_a_jour) {
+      try {
+        await axios.post('/api/excel/mettre-a-jour', {
+          reference: p.reference,
+          site: p.site_excel || 'cedi',
+          prix: p.prix,
+        })
+        ok++
+      } catch (e) {
+        fail++
+      }
     }
+    setProduits(prev => prev.map(p => {
+      if (!a_mettre_a_jour.some(aj => aj.reference === p.reference)) return p
+      const frais = detecterFrais(p.nom)
+      const ecoVal = edits[`eco_${p.reference}`] !== undefined && edits[`eco_${p.reference}`] !== ''
+        ? parseFloat(edits[`eco_${p.reference}`])
+        : (parseFloat(p.eco_part_site) || parseFloat(p.eco_part) || 0)
+      let miniCalc = (parseFloat(p.prix) + ecoVal + frais) * 1.2
+      if (p.site_excel === 'gpdis') miniCalc /= 0.98
+      miniCalc = Math.round(miniCalc * 100) / 100
+      return { ...p, prix_excel: parseFloat(p.prix), mini: miniCalc, _dans_excel: true, _mis_a_jour: true }
+    }))
+    if (cacheKeyProducts && siteInfo?.url) {
+      const cached = getCache(cacheKeyProducts, 300000)
+      if (cached?.produits) {
+        const updated = cached.produits.map(p => {
+          if (!a_mettre_a_jour.some(aj => aj.reference === p.reference)) return p
+          const frais = detecterFrais(p.nom)
+          const ecoVal = edits[`eco_${p.reference}`] !== undefined && edits[`eco_${p.reference}`] !== ''
+            ? parseFloat(edits[`eco_${p.reference}`])
+            : (parseFloat(p.eco_part_site) || parseFloat(p.eco_part) || 0)
+          let miniCalc = (parseFloat(p.prix) + ecoVal + frais) * 1.2
+          if (p.site_excel === 'gpdis') miniCalc /= 0.98
+          miniCalc = Math.round(miniCalc * 100) / 100
+          return { ...p, prix_excel: parseFloat(p.prix), mini: miniCalc, _dans_excel: true, _mis_a_jour: true }
+        })
+        setCache(cacheKeyProducts, { ...cached, produits: updated })
+        localStorage.setItem(`explo_produits_local_${siteInfo.url}`, JSON.stringify(updated))
+      }
+    }
+    setToast({ message: `✅ ${ok} produit(s) mis à jour${fail ? ` (${fail} échoué(s))` : ''}`, type: 'success' })
+    setTimeout(() => setToast(null), 5000)
     setLotMajLoading(false)
   }
 
   const mettreAJour = async (produit) => {
-    const key = `update_${produit.reference}`
+    const ref = produit.reference
+    const key = `update_${ref}`
     setAjoutsEnCours(prev => ({ ...prev, [key]: 'loading' }))
     try {
       await axios.post('/api/excel/mettre-a-jour', {
-        reference: produit.reference,
+        reference: ref,
         site: produit.site_excel || 'cedi',
         prix: produit.prix,
       })
+      const frais = detecterFrais(produit.nom)
+      const ecoVal = edits[`eco_${ref}`] !== undefined && edits[`eco_${ref}`] !== ''
+        ? parseFloat(edits[`eco_${ref}`])
+        : (parseFloat(produit.eco_part_site) || parseFloat(produit.eco_part) || 0)
+      let miniCalc = (parseFloat(produit.prix) + ecoVal + frais) * 1.2
+      if (produit.site_excel === 'gpdis') miniCalc /= 0.98
+      miniCalc = Math.round(miniCalc * 100) / 100
+
+      const updater = (p) => {
+        if (p.reference !== ref) return p
+        const updated = { ...p, prix_excel: parseFloat(produit.prix), mini: miniCalc, _dans_excel: true }
+        return updated
+      }
+      setProduits(prev => prev.map(updater))
+      if (cacheKeyProducts && siteInfo?.url) {
+        const cached = getCache(cacheKeyProducts, 300000)
+        if (cached?.produits) {
+          const updated = cached.produits.map(updater)
+          setCache(cacheKeyProducts, { ...cached, produits: updated })
+          localStorage.setItem(`explo_produits_local_${siteInfo.url}`, JSON.stringify(updated))
+        }
+      }
       setAjoutsEnCours(prev => ({ ...prev, [key]: 'done' }))
-      setToast({ message: `"${produit.reference}" mis à jour`, type: 'success' })
+      setToast({ message: `"${ref}" mis à jour`, type: 'success' })
       setTimeout(() => setToast(null), 3000)
     } catch (e) {
       const msg = e.response?.data?.erreur || 'Erreur mise à jour'
@@ -545,7 +596,7 @@ export default function Explorateur() {
       })
       const majProduits = prev => prev.map(p =>
         (p.reference === produit.reference && p.nom === produit.nom)
-          ? { ...p, _dans_excel: true } : p
+          ? { ...p, _dans_excel: true, prix_excel: parseFloat(produit.prix), mini: Math.round(miniCalcule * 100) / 100, eco_part: ecoPartFinal } : p
       )
       setProduits(majProduits)
       if (cacheKeyProducts && siteInfo?.url) {
@@ -553,7 +604,7 @@ export default function Explorateur() {
         if (cached?.produits) {
           const updated = cached.produits.map(p =>
             (p.reference === produit.reference && p.nom === produit.nom)
-              ? { ...p, _dans_excel: true } : p
+              ? { ...p, _dans_excel: true, prix_excel: parseFloat(produit.prix), mini: Math.round(miniCalcule * 100) / 100, eco_part: ecoPartFinal } : p
           )
           setCache(cacheKeyProducts, { ...cached, produits: updated })
           localStorage.setItem(`explo_produits_local_${siteInfo.url}`, JSON.stringify(updated))
@@ -565,9 +616,12 @@ export default function Explorateur() {
     } catch (e) {
       const msg = e.response?.data?.erreur || 'Erreur ajout'
       if (e.response?.status === 409 && msg.includes('existe déjà')) {
+        const frais = detecterFrais(produit.nom)
+        const ecoPartFinal409 = (ecoVal !== undefined && ecoVal !== '') ? parseFloat(ecoVal) : (parseFloat(produit.eco_part_site) || parseFloat(produit.eco_part) || null)
+        const miniFinal409 = Math.round(((parseFloat(produit.prix) + (ecoPartFinal409 || 0) + frais) * (site === 'gpdis' ? 1.2 / 0.98 : 1.2)) * 100) / 100
         const majProduits = prev => prev.map(p =>
           (p.reference === produit.reference && p.nom === produit.nom)
-            ? { ...p, _dans_excel: true } : p
+            ? { ...p, _dans_excel: true, prix_excel: parseFloat(produit.prix), mini: miniFinal409, eco_part: ecoPartFinal409 } : p
         )
         setProduits(majProduits)
         if (cacheKeyProducts && siteInfo?.url) {
@@ -575,7 +629,7 @@ export default function Explorateur() {
           if (cached?.produits) {
             const updated = cached.produits.map(p =>
               (p.reference === produit.reference && p.nom === produit.nom)
-                ? { ...p, _dans_excel: true } : p
+                ? { ...p, _dans_excel: true, prix_excel: parseFloat(produit.prix), mini: miniFinal409, eco_part: ecoPartFinal409 } : p
             )
             setCache(cacheKeyProducts, { ...cached, produits: updated })
             localStorage.setItem(`explo_produits_local_${siteInfo.url}`, JSON.stringify(updated))
