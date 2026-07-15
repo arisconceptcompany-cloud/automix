@@ -1000,29 +1000,68 @@ export default function Explorateur() {
                                 {}
                               }>{p.disponibilite || '—'}</span></td>
                               <td>
-                                {p.excel_prices && Object.keys(p.excel_prices).length > 0 ? (
-                                  <span className={styles.prixDual}>
-                                    {Object.entries(p.excel_prices).map(([s, pr]) => (
-                                      <span key={s}
-                                        className={s === p.site_excel ? styles.prix : styles.excelOther}>
-                                        {s.toUpperCase()+' '+parseFloat(pr).toFixed(2)+' €'}
+                                {(() => {
+                                  const allPrices = []
+                                  if (p.excel_prices && Object.keys(p.excel_prices).length > 0) {
+                                    Object.entries(p.excel_prices).forEach(([s, pr]) => {
+                                      const v = parseFloat(pr)
+                                      if (!isNaN(v)) allPrices.push({ site: s, val: v })
+                                    })
+                                  } else if (p.prix_excel != null) {
+                                    allPrices.push({ site: p.site_excel || 'excel', val: parseFloat(p.prix_excel) })
+                                  }
+                                  if (p.prix != null) allPrices.push({ site: '_site', val: parseFloat(p.prix) })
+                                  const minVal = allPrices.length > 0 ? Math.min(...allPrices.map(x => x.val)) : null
+
+                                  if (p.excel_prices && Object.keys(p.excel_prices).length > 0) {
+                                    return (
+                                      <span className={styles.prixDual}>
+                                        {Object.entries(p.excel_prices).map(([s, pr]) => {
+                                          const v = parseFloat(pr)
+                                          const isMin = minVal != null && !isNaN(v) && v === minVal
+                                          return (
+                                            <span key={s}
+                                              className={`${s === p.site_excel ? styles.prix : styles.excelOther}${isMin ? ' ' + styles.prixMinDot : ''}`}>
+                                              {s.toUpperCase()+' '+v.toFixed(2)+' €'}
+                                            </span>
+                                          )
+                                        })}
                                       </span>
-                                    ))}
-                                  </span>
-                                ) : p.prix_excel != null ? (
-                                  <span className={styles.prix}>
-                                    {(p.site_excel || 'Excel').toUpperCase()+' '+parseFloat(p.prix_excel).toFixed(2)+' €'}
-                                  </span>
-                                ) : (
-                                  <span className={styles.badgeGris}>—</span>
-                                )}
+                                    )
+                                  } else if (p.prix_excel != null) {
+                                    const v = parseFloat(p.prix_excel)
+                                    const isMin = minVal != null && !isNaN(v) && v === minVal
+                                    return (
+                                      <span className={`${styles.prix}${isMin ? ' ' + styles.prixMinDot : ''}`}>
+                                        {(p.site_excel || 'Excel').toUpperCase()+' '+v.toFixed(2)+' €'}
+                                      </span>
+                                    )
+                                  }
+                                  return <span className={styles.badgeGris}>—</span>
+                                })()}
                               </td>
                               <td>
-                                {p.prix != null ? (
-                                  <span className={styles.prix}>{parseFloat(p.prix).toFixed(2)+' €'}</span>
-                                ) : (
-                                  <span className={styles.badgeGris}>—</span>
-                                )}
+                                {(() => {
+                                  const allPrices = []
+                                  if (p.excel_prices && Object.keys(p.excel_prices).length > 0) {
+                                    Object.entries(p.excel_prices).forEach(([s, pr]) => {
+                                      const v = parseFloat(pr)
+                                      if (!isNaN(v)) allPrices.push(v)
+                                    })
+                                  } else if (p.prix_excel != null) {
+                                    allPrices.push(parseFloat(p.prix_excel))
+                                  }
+                                  if (p.prix != null) allPrices.push(parseFloat(p.prix))
+                                  const minVal = allPrices.length > 0 ? Math.min(...allPrices) : null
+                                  const siteVal = p.prix != null ? parseFloat(p.prix) : null
+                                  const isMin = minVal != null && siteVal != null && siteVal === minVal
+
+                                  return p.prix != null ? (
+                                    <span className={`${styles.prix}${isMin ? ' ' + styles.prixMinDot : ''}`}>{siteVal.toFixed(2)+' €'}</span>
+                                  ) : (
+                                    <span className={styles.badgeGris}>—</span>
+                                  )
+                                })()}
                               </td>
                               <td className={styles.prix}>
                                 {(() => {

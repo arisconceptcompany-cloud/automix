@@ -267,6 +267,17 @@
 .badgeVert  { background: #bbf7d0; color: #14532d; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap; }
 .badgeGris  { color: var(--text2); font-size: 11px; }
 
+.prixMinDot::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #eab308;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
 /* Accueil */
 .accueil { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; padding: 60px 40px; color: var(--text2); }
 .accueil h2 { font-size: 20px; font-weight: 700; color: var(--text); }
