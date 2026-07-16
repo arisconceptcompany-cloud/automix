@@ -263,6 +263,31 @@
 .miniExcel { font-weight: 700; color: var(--success); white-space: nowrap; font-size: 12px; }
 .miniSite  { font-weight: 600; color: #f97316; white-space: nowrap; font-size: 11px; }
 
+/* ── Chrono timer ─────────────────────────────────────────── */
+.chrono {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 20px;
+  font-size: 12px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap; flex-shrink: 0;
+}
+.chronoIcon { font-size: 13px; }
+.chronoRunning {
+  color: #f97316;
+  background: #f9731618;
+  border: 1px solid #f9731644;
+  animation: chronoPulse 1s ease-in-out infinite;
+}
+.chronoDone {
+  color: var(--success);
+  background: #22c55e18;
+  border: 1px solid #22c55e44;
+}
+@keyframes chronoPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .6; }
+}
+
 .badgeJaune { background: #fef08a; color: #713f12; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap; }
 .badgeVert  { background: #bbf7d0; color: #14532d; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap; }
 .badgeGris  { color: var(--text2); font-size: 11px; }
@@ -388,6 +413,15 @@
   gap: 4px;
   margin-bottom: 8px;
 }
+.marqueChip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-radius: 4px;
+  transition: background .12s;
+}
+.marqueChip:hover { background: var(--bg2); }
+.marqueChip:hover .marqueDel { opacity: 1; }
 .marqueLabel {
   display: flex;
   align-items: center;
@@ -398,10 +432,29 @@
   padding: 3px 4px;
   border-radius: 4px;
   transition: background .12s;
+  flex: 1;
+  min-width: 0;
 }
 .marqueLabel:hover { background: var(--bg2); }
 .marqueLabel input { cursor: pointer; accent-color: var(--accent); }
 .marqueOn { color: var(--text); font-weight: 600; }
+.marqueDel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text2);
+  cursor: pointer;
+  opacity: 0;
+  transition: all .15s;
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+.marqueDel:hover { background: var(--danger); color: #fff; }
 
 .marquesAdd {
   display: flex;

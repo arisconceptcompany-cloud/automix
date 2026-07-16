@@ -94,6 +94,21 @@ export default function Explorateur() {
   const [produits,    setProduits]    = useState([])
   const [loadingProd, setLoadingProd] = useState(false)
 
+  const chronoStartRef = useRef(null)
+  const [chronoElapsed, setChronoElapsed] = useState(null)
+  const chronoIntervalRef = useRef(null)
+
+  const formatChrono = (secs) => {
+    const s = parseFloat(secs) || 0
+    if (s < 60) return s.toFixed(1) + 's'
+    const m = Math.floor(s / 60)
+    const r = Math.floor(s % 60)
+    if (m < 60) return m + 'm' + (r < 10 ? '0' : '') + r + 's'
+    const h = Math.floor(m / 60)
+    const rm = m % 60
+    return h + 'h' + (rm < 10 ? '0' : '') + rm + 'm'
+  }
+
   const produitsFiltres = (() => {
     if (!marquesActives.length) return produits
     return produits.filter(p => {
@@ -178,6 +193,12 @@ export default function Explorateur() {
   useEffect(() => {
     localStorage.setItem('categoriesVerifiees', JSON.stringify([...verifiees]))
   }, [verifiees])
+
+  useEffect(() => {
+    return () => {
+      if (chronoIntervalRef.current) clearInterval(chronoIntervalRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     restaurerDepuisCache()
@@ -366,6 +387,15 @@ export default function Explorateur() {
 
     if (!hasCached) { setProduits([]); setLoadingProd(true) }
 
+    chronoStartRef.current = Date.now()
+    setChronoElapsed(null)
+    if (chronoIntervalRef.current) clearInterval(chronoIntervalRef.current)
+    chronoIntervalRef.current = setInterval(() => {
+      if (chronoStartRef.current) {
+        setChronoElapsed(((Date.now() - chronoStartRef.current) / 1000).toFixed(1))
+      }
+    }, 100)
+
     try {
       const res = await axios.post('/api/explorateur/produits', {
         url:    lien.href.startsWith('javascript:') || lien.href === '#' ? site : lien.href,
@@ -410,7 +440,13 @@ export default function Explorateur() {
         localStorage.setItem(key, JSON.stringify(nouveauxProduits))
       }
     } catch { if (!hasCached) setProduits([]) }
-    finally { setLoadingProd(false) }
+    finally {
+      if (chronoIntervalRef.current) { clearInterval(chronoIntervalRef.current); chronoIntervalRef.current = null }
+      const elapsed = chronoStartRef.current ? ((Date.now() - chronoStartRef.current) / 1000).toFixed(1) : null
+      chronoStartRef.current = null
+      setChronoElapsed(elapsed)
+      setLoadingProd(false)
+    }
   }, [cacheKeyProducts, siteInfo, marquesActives, cediSite, connecte, urlRef])
 
   const soumettreCaptcha = useCallback(async (token) => {
@@ -892,14 +928,24 @@ export default function Explorateur() {
                 <div className={styles.marquesPanel}>
                   <div className={styles.marquesGrid}>
                     {marquesDispos.map(m => (
-                      <label key={m} className={styles.marqueLabel}>
-                        <input
-                          type="checkbox"
-                          checked={marquesActives.includes(m)}
-                          onChange={() => toggleMarque(m)}
-                        />
-                        <span className={marquesActives.includes(m) ? styles.marqueOn : ''}>{m}</span>
-                      </label>
+                      <div key={m} className={styles.marqueChip}>
+                        <label className={styles.marqueLabel}>
+                          <input
+                            type="checkbox"
+                            checked={marquesActives.includes(m)}
+                            onChange={() => toggleMarque(m)}
+                          />
+                          <span className={marquesActives.includes(m) ? styles.marqueOn : ''}>{m}</span>
+                        </label>
+                        <button className={styles.marqueDel} title={`Retirer ${m}`}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setMarquesDispos(prev => prev.filter(x => x !== m))
+                            setMarquesActives(prev => prev.filter(x => x !== m))
+                          }}>
+                          <X size={10}/>
+                        </button>
+                      </div>
                     ))}
                   </div>
                   <div className={styles.marquesAdd}>
@@ -968,7 +1014,19 @@ export default function Explorateur() {
             ) : (
               <>
                 <div className={styles.contenuHeader}>
-                  <div className={styles.contenuTitre}>{lienActif.texte || lienActif.href}</div>
+                  <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', gap:12}}>
+                    <div className={styles.contenuTitre}>{lienActif.texte || lienActif.href}</div>
+                    {(loadingProd || chronoElapsed) && (
+                      <div className={styles.chrono}>
+                        <span className={styles.chronoIcon}>⏱</span>
+                        {loadingProd ? (
+                          <span className={styles.chronoRunning}>{formatChrono(chronoElapsed || 0)}</span>
+                        ) : (
+                          <span className={styles.chronoDone}>{formatChrono(chronoElapsed)}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
                   <a href={lienActif.href} target="_blank" rel="noreferrer" className={styles.contenuUrl}>
                     <ExternalLink size={12}/> {lienActif.href}
                   </a>
@@ -1154,25 +1212,6 @@ export default function Explorateur() {
                                 <span className={styles.prixDual}>
                                   {p.mini != null && (
                                     <span className={styles.miniExcel}>{parseFloat(p.mini).toFixed(2)} €</span>
-                                  )}
-                                  {p.prix != null && (p.eco_part_site != null || p.eco_part != null || (edits[`eco_${key}`] !== undefined && edits[`eco_${key}`] !== '')) && (
-                                    <span className={styles.miniSite}>
-                                      {(() => {
-                                        const frais = detecterFrais(p.nom)
-                                        const ecoValue = edits[`eco_${key}`] !== undefined && edits[`eco_${key}`] !== ''
-                                          ? parseFloat(edits[`eco_${key}`])
-                                          : (p.eco_part_site != null ? parseFloat(p.eco_part_site)
-                                            : (p.eco_part != null ? parseFloat(p.eco_part) : 0))
-                                        let miniCalcule = (parseFloat(p.prix) + ecoValue + frais) * 1.2
-                                        if (p.site_excel === 'gpdis') miniCalcule /= 0.98
-                                        return (
-                                          <>
-                                            {miniCalcule < parseFloat(p.mini || 999999) ? '▲ ' : '▼ '}
-                                            {miniCalcule.toFixed(2)} €
-                                          </>
-                                        )
-                                      })()}
-                                    </span>
                                   )}
                                   {p.mini == null && (p.prix == null || (p.eco_part == null && p.eco_part_site == null)) && (
                                     p._dans_excel ? <span className={styles.badgeGris}>—</span> : '—'
