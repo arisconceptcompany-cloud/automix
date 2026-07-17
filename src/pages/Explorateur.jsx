@@ -511,6 +511,7 @@ export default function Explorateur() {
           reference: p.reference,
           site: p.site_excel || 'cedi',
           prix: p.prix,
+          disponibilite: p.disponibilite || '',
         })
         ok++
       } catch (e) {
@@ -560,6 +561,7 @@ export default function Explorateur() {
         reference: ref,
         site: produit.site_excel || 'cedi',
         prix: produit.prix,
+        disponibilite: produit.disponibilite || '',
       })
       const frais = detecterFrais(produit.nom)
       const ecoVal = edits[`eco_${ref}`] !== undefined && edits[`eco_${ref}`] !== ''
