@@ -108,19 +108,25 @@ export default function Excel() {
   // ── Colonnes à masquer ──────────────────────────────────────
   const MOTS_CACHER = [
     'materiaux', 'material', 'coloris', 'couleur', 'color',
-    'debit nominal', 'debit', 'classe energie', 'classe énergie',
-    'classe', 'energie', 'énergie',
+    'debit', 'débit',
+    'classe energie', 'classe énergie', 'classe energy',
+    'classe', 'energie', 'énergie', 'energy',
     'largeur', 'width',
-    'tarif de base', 'tarif',
-    'prix avec remise', 'remise', 'discount',
+    'tarif de base', 'tarif de bases', 'tarif',
+    'prix avec remise', 'prix avec remises', 'remise', 'discount',
     'prime',
-    'prix facture', 'facture', 'invoice',
+    'prix facture', 'prix factures', 'facture', 'invoice',
     'differe', 'différé', 'deferred',
     'ppi',
+    'coef',
+    'st',
   ]
 
+  const _normalize = (s) =>
+    s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+
   const colonneVisible = (colName) => {
-    const base = colName.replace(/_\d+$/, '').toLowerCase().trim()
+    const base = _normalize(colName.replace(/_\d+$/, ''))
     return !MOTS_CACHER.some(m => base.includes(m))
   }
 
