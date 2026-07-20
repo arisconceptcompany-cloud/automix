@@ -97,12 +97,20 @@ export default function Excel() {
     }
   }
 
-  // ── Rafraîchir après upload d'un autre utilisateur ──────
+  // ── Rafraîchir au retour sur l'onglet ──────────────────────
+  const _lastRefresh = useRef(0)
   useEffect(() => {
-    const interval = setInterval(() => {
-      charger(true)
-    }, 60000)
-    return () => clearInterval(interval)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        const now = Date.now()
+        if (now - _lastRefresh.current > 120000) {
+          _lastRefresh.current = now
+          charger(true)
+        }
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
   }, [])
 
   // ── Colonnes à masquer ──────────────────────────────────────
