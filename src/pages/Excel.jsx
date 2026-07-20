@@ -105,14 +105,34 @@ export default function Excel() {
     return () => clearInterval(interval)
   }, [])
 
-  // ── Colonnes à afficher (dédupliquées) ───────────────────
+  // ── Colonnes à masquer ──────────────────────────────────────
+  const MOTS_CACHER = [
+    'materiaux', 'material', 'coloris', 'couleur', 'color',
+    'debit nominal', 'debit', 'classe energie', 'classe énergie',
+    'classe', 'energie', 'énergie',
+    'largeur', 'width',
+    'tarif de base', 'tarif',
+    'prix avec remise', 'remise', 'discount',
+    'prime',
+    'prix facture', 'facture', 'invoice',
+    'differe', 'différé', 'deferred',
+    'ppi',
+  ]
+
+  const colonneVisible = (colName) => {
+    const base = colName.replace(/_\d+$/, '').toLowerCase().trim()
+    return !MOTS_CACHER.some(m => base.includes(m))
+  }
+
+  // ── Colonnes à afficher (dédupliquées + filtrées) ──────────
   const cols = colonnes.length > 0
-    ? colonnes
+    ? colonnes.filter(colonneVisible)
     : produits.length > 0
       ? (() => {
           const seen = {}
           return Object.keys(produits[0])
             .filter(k => !k.startsWith('_'))
+            .filter(colonneVisible)
             .map(c => {
               if (seen[c] === undefined) { seen[c] = 0; return c }
               seen[c]++; return `${c}_${seen[c]}`
