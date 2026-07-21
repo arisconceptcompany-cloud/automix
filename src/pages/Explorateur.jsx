@@ -507,11 +507,21 @@ export default function Explorateur() {
     let ok = 0, fail = 0
     for (const p of a_mettre_a_jour) {
       try {
+        const fraisT = detecterFrais(p.nom)
+        const ecoValT = edits[`eco_${p.reference}`] !== undefined && edits[`eco_${p.reference}`] !== ''
+          ? parseFloat(edits[`eco_${p.reference}`])
+          : (parseFloat(p.eco_part_site) || parseFloat(p.eco_part) || 0)
+        let miniT = (parseFloat(p.prix) + ecoValT + fraisT) * 1.2
+        if (p.site_excel === 'gpdis') miniT /= 0.98
+        miniT = Math.round(miniT * 100) / 100
+        const conc1T = edits[`pc_${p.reference}`] || p.prix_comparer || null
         await axios.post('/api/excel/mettre-a-jour', {
           reference: p.reference,
           site: p.site_excel || 'cedi',
           prix: p.prix,
           disponibilite: p.disponibilite || '',
+          conc1: conc1T,
+          mini: miniT,
         })
         ok++
       } catch (e) {
@@ -547,7 +557,7 @@ export default function Explorateur() {
         localStorage.setItem(`explo_produits_local_${siteInfo.url}`, JSON.stringify(updated))
       }
     }
-    setToast({ message: `✅ ${ok} produit(s) mis à jour${fail ? ` (${fail} échoué(s))` : ''}`, type: 'success' })
+    setToast({ message: `✅ ${ok} produit(s) A jour${fail ? ` (${fail} échoué(s))` : ''}`, type: 'success' })
     setTimeout(() => setToast(null), 5000)
     setLotMajLoading(false)
   }
@@ -557,12 +567,6 @@ export default function Explorateur() {
     const key = `update_${ref}`
     setAjoutsEnCours(prev => ({ ...prev, [key]: 'loading' }))
     try {
-      await axios.post('/api/excel/mettre-a-jour', {
-        reference: ref,
-        site: produit.site_excel || 'cedi',
-        prix: produit.prix,
-        disponibilite: produit.disponibilite || '',
-      })
       const frais = detecterFrais(produit.nom)
       const ecoVal = edits[`eco_${ref}`] !== undefined && edits[`eco_${ref}`] !== ''
         ? parseFloat(edits[`eco_${ref}`])
@@ -570,10 +574,19 @@ export default function Explorateur() {
       let miniCalc = (parseFloat(produit.prix) + ecoVal + frais) * 1.2
       if (produit.site_excel === 'gpdis') miniCalc /= 0.98
       miniCalc = Math.round(miniCalc * 100) / 100
+      const conc1Val = edits[`pc_${ref}`] || produit.prix_comparer || null
+      await axios.post('/api/excel/mettre-a-jour', {
+        reference: ref,
+        site: produit.site_excel || 'cedi',
+        prix: produit.prix,
+        disponibilite: produit.disponibilite || '',
+        conc1: conc1Val,
+        mini: miniCalc,
+      })
 
       const updater = (p) => {
         if (p.reference !== ref) return p
-        const updated = { ...p, prix_excel: parseFloat(produit.prix), mini: miniCalc, _dans_excel: true }
+        const updated = { ...p, prix_excel: parseFloat(produit.prix), mini: miniCalc, _dans_excel: true, prix_comparer: conc1Val || p.prix_comparer }
         return updated
       }
       setProduits(prev => prev.map(updater))
@@ -620,12 +633,13 @@ export default function Explorateur() {
       const ecoPartForCalc = (ecoVal !== undefined && ecoVal !== '') ? parseFloat(ecoVal) : (parseFloat(produit.eco_part_site) || parseFloat(produit.eco_part) || 0)
       let miniCalcule = (parseFloat(produit.prix) + ecoPartForCalc + frais) * 1.2
       if (site === 'gpdis') miniCalcule /= 0.98
+      const miniArrondi = Math.round(miniCalcule * 100) / 100
       await axios.post('/api/excel/ajouter-produit', {
         reference: produit.reference, nom: produit.nom,
         prix: produit.prix, site: site,
         eco_part: ecoPartFinal,
-        prix_comparer: prixCoparFinal,
-        mini: Math.round(miniCalcule * 100) / 100,
+        conc1: prixCoparFinal,
+        mini: miniArrondi,
         ean13: produit.ean13 || null,
         famille: produit.famille || null,
         sous_famille: produit.sous_famille || null,
@@ -634,7 +648,7 @@ export default function Explorateur() {
       })
       const majProduits = prev => prev.map(p =>
         (p.reference === produit.reference && p.nom === produit.nom)
-          ? { ...p, _dans_excel: true, prix_excel: parseFloat(produit.prix), mini: Math.round(miniCalcule * 100) / 100, eco_part: ecoPartFinal } : p
+          ? { ...p, _dans_excel: true, prix_excel: parseFloat(produit.prix), mini: miniArrondi, eco_part: ecoPartFinal, prix_comparer: prixCoparFinal || p.prix_comparer } : p
       )
       setProduits(majProduits)
       if (cacheKeyProducts && siteInfo?.url) {
@@ -642,7 +656,7 @@ export default function Explorateur() {
         if (cached?.produits) {
           const updated = cached.produits.map(p =>
             (p.reference === produit.reference && p.nom === produit.nom)
-              ? { ...p, _dans_excel: true, prix_excel: parseFloat(produit.prix), mini: Math.round(miniCalcule * 100) / 100, eco_part: ecoPartFinal } : p
+              ? { ...p, _dans_excel: true, prix_excel: parseFloat(produit.prix), mini: miniArrondi, eco_part: ecoPartFinal, prix_comparer: prixCoparFinal || p.prix_comparer } : p
           )
           setCache(cacheKeyProducts, { ...cached, produits: updated })
           localStorage.setItem(`explo_produits_local_${siteInfo.url}`, JSON.stringify(updated))
@@ -657,9 +671,10 @@ export default function Explorateur() {
         const frais = detecterFrais(produit.nom)
         const ecoPartFinal409 = (ecoVal !== undefined && ecoVal !== '') ? parseFloat(ecoVal) : (parseFloat(produit.eco_part_site) || parseFloat(produit.eco_part) || null)
         const miniFinal409 = Math.round(((parseFloat(produit.prix) + (ecoPartFinal409 || 0) + frais) * (site === 'gpdis' ? 1.2 / 0.98 : 1.2)) * 100) / 100
+        const conc1Final = pcVal || produit.prix_comparer || null
         const majProduits = prev => prev.map(p =>
           (p.reference === produit.reference && p.nom === produit.nom)
-            ? { ...p, _dans_excel: true, prix_excel: parseFloat(produit.prix), mini: miniFinal409, eco_part: ecoPartFinal409 } : p
+            ? { ...p, _dans_excel: true, prix_excel: parseFloat(produit.prix), mini: miniFinal409, eco_part: ecoPartFinal409, prix_comparer: conc1Final || p.prix_comparer } : p
         )
         setProduits(majProduits)
         if (cacheKeyProducts && siteInfo?.url) {
@@ -667,7 +682,7 @@ export default function Explorateur() {
           if (cached?.produits) {
             const updated = cached.produits.map(p =>
               (p.reference === produit.reference && p.nom === produit.nom)
-                ? { ...p, _dans_excel: true, prix_excel: parseFloat(produit.prix), mini: miniFinal409, eco_part: ecoPartFinal409 } : p
+                ? { ...p, _dans_excel: true, prix_excel: parseFloat(produit.prix), mini: miniFinal409, eco_part: ecoPartFinal409, prix_comparer: conc1Final || p.prix_comparer } : p
             )
             setCache(cacheKeyProducts, { ...cached, produits: updated })
             localStorage.setItem(`explo_produits_local_${siteInfo.url}`, JSON.stringify(updated))
@@ -1085,7 +1100,7 @@ export default function Explorateur() {
                         <col className={styles.colStatut}/>
                       </colgroup>
                       <thead>
-                        <tr><th>#</th><th>Photo</th><th>Réf.</th><th>EAN13</th><th>Famille</th><th>Sous-famille</th><th>Nom</th><th>Disponibilité</th><th>Prix Excel</th><th>Prix Site</th><th>Eco Part</th><th>Mini</th><th>Px Comparer</th><th>PDF</th><th>Statut</th></tr>
+                        <tr><th>#</th><th>Photo</th><th>Réf.</th><th>EAN13</th><th>Famille</th><th>Sous-famille</th><th>Nom</th><th>Disponibilité</th><th>Prix Excel</th><th>Prix Site</th><th>Eco Part</th><th>Mini</th><th>Conc 1</th><th>PDF</th><th>Statut</th></tr>
                       </thead>
                       <tbody>
                         {produitsFiltres.map((p, i) => {
@@ -1220,11 +1235,15 @@ export default function Explorateur() {
                                   )}
                                 </span>
                               </td>
-                              <td className={styles.comparer}>
-                                 {p.prix_comparer != null ? (
-                                   <span className={styles.comparerVal}>
-                                     {p.prix_comparer}
-                                   </span>
+                               <td className={styles.comparer}>
+                                  {p.prix_comparer != null ? (
+                                    <span className={styles.comparerVal}>
+                                      {(() => {
+                                        const raw = String(p.prix_comparer)
+                                        const cleaned = raw.replace(/\s*\([^)]*\)\s*$/, '').trim()
+                                        return cleaned || raw
+                                      })()}
+                                    </span>
                                 ) : (
                                   <div style={{display:'flex', gap:4, alignItems:'center'}}>
                                     <span className={styles.badgeGris}>—</span>
@@ -1410,6 +1429,8 @@ export default function Explorateur() {
                           val = '—'
                         }
                       }
+                      else if (n(col).includes('CONC'))
+                        val = edits[`pc_${mKey}`] || modalAjout.prix_comparer || '—'
                       else if (n(col).includes('PRIMO') || (n(col).includes('PRIX') && (n(col).includes('COMPAR') || n(col).includes('COMPARER'))))
                         val = edits[`pc_${mKey}`] || modalAjout.prix_comparer || '—'
                       else if (n(col) === 'MINI')
