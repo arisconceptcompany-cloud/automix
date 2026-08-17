@@ -1108,7 +1108,7 @@ export default function Explorateur() {
                               <td className={styles.num}>{i+1}</td>
                               <td className={styles.photoCell}>
                                 {p.image
-                                  ? <a href={p.url || p.image} target="_blank" rel="noreferrer" title={p.url ? 'Voir le produit' : 'Voir l'image'}>
+                                  ? <a href={p.url || p.image} target="_blank" rel="noreferrer" title={p.url ? "Voir le produit" : "Voir l'image"}>
                                       <img src={p.image} alt={p.nom} className={styles.prodImg}/>
                                     </a>
                                   : <span className={styles.noImg}>—</span>
