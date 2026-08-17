@@ -1,0 +1,172 @@
+.page {
+  padding: 28px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 1200px;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+/* En-tête */
+.header { display: flex; align-items: flex-start; gap: 14px; }
+.header h1 { font-size: 20px; font-weight: 700; }
+.header p  { color: var(--text2); font-size: 13px; margin-top: 3px; }
+
+/* Messages */
+.msg {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 14px; border-radius: 8px; font-size: 13px; font-weight: 500;
+}
+.msg button { background: none; color: inherit; cursor: pointer; font-size: 15px; border: none; }
+.msg_ok   { background: #14532d33; border: 1px solid var(--success); color: var(--success); }
+.msg_err  { background: #7f1d1d33; border: 1px solid var(--danger);  color: var(--danger);  }
+.msg_warn { background: #71390033; border: 1px solid var(--warning); color: var(--warning); }
+
+/* Zone de drop */
+.dropZone {
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  padding: 32px;
+  text-align: center;
+  cursor: pointer;
+  transition: all .2s;
+  background: var(--bg2);
+  flex-shrink: 0;
+}
+.dropZone:hover, .dropActive {
+  border-color: var(--accent);
+  background: #6366f108;
+}
+.dropIcon  { margin: 0 auto 10px; color: var(--text2); }
+.dropTitle { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+.dropSub   { color: var(--text2); font-size: 13px; }
+
+/* Toolbar */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.searchWrap {
+  flex: 1;
+  position: relative;
+  min-width: 200px;
+}
+.searchIcon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text2);
+}
+.searchInput {
+  width: 100%;
+  padding-left: 32px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+.toolbarActions { display: flex; gap: 8px; }
+.iconBtn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border-radius: 8px;
+  background: var(--bg3); border: 1px solid var(--border);
+  color: var(--text2); cursor: pointer; text-decoration: none;
+  font-size: 13px; font-weight: 500;
+  transition: all .15s;
+}
+.iconBtn:hover { border-color: var(--accent); color: var(--accent2); }
+.iconBtnDanger:hover { border-color: var(--danger); color: var(--danger); }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* États */
+.loading {
+  padding: 40px;
+  text-align: center;
+  color: var(--text2);
+  font-style: italic;
+}
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 50px;
+  color: var(--text2);
+  text-align: center;
+}
+.emptyIcon { opacity: .2; margin-bottom: 6px; }
+.empty p    { font-size: 15px; font-weight: 500; color: var(--text); }
+.empty span { font-size: 13px; }
+
+/* Tableau */
+.tableInfo {
+  font-size: 12px;
+  color: var(--text2);
+  margin-bottom: 10px;
+}
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  flex: 1;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.table th {
+  text-align: left;
+  padding: 10px 14px;
+  background: var(--bg2);
+  color: var(--text2);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+}
+.table td {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.table tr:last-child td { border-bottom: none; }
+.table tr:hover td { background: var(--bg2); }
+.rowModifie td { background: #fef08a44 !important; }
+.rowModifie:hover td { background: #fef08a88 !important; }
+.num { color: var(--text2); font-size: 11px; width: 36px; }
+
+@media (max-width: 768px) {
+  .page { padding: 16px; height: auto; min-height: 100vh; gap: 14px; }
+  .header h1 { font-size: 17px; }
+  .header p  { font-size: 12px; }
+  .dropZone { padding: 20px 16px; }
+  .dropTitle { font-size: 14px; }
+  .dropSub   { font-size: 12px; }
+  .toolbar { flex-direction: column; align-items: stretch; }
+  .searchWrap { min-width: unset; }
+  .toolbarActions { justify-content: stretch; }
+  .toolbarActions button,
+  .toolbarActions a { flex: 1; justify-content: center; }
+  .table { font-size: 12px; min-width: 500px; }
+  .table th, .table td { padding: 7px 10px; }
+  .tableWrap { max-height: 60vh; }
+}
+
+@media (max-width: 480px) {
+  .page { padding: 10px; }
+  .table { font-size: 11px; min-width: 400px; }
+  .table th, .table td { padding: 5px 7px; }
+  .empty { padding: 30px 16px; }
+}

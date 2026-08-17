@@ -1,0 +1,134 @@
+.page {
+  min-height: 100vh;
+  background: radial-gradient(ellipse at 30% 20%, #1a1d2e 0%, #0f1117 70%);
+  display: flex; align-items: center; justify-content: center;
+}
+
+.wrapper { display: flex; align-items: center; justify-content: center; width: 100%; padding: 2rem; }
+
+.card {
+  background: var(--bg2); border-radius: 16px;
+  padding: 2.5rem; width: 100%; max-width: 460px;
+  box-shadow: 0 8px 40px rgba(0,0,0,.4);
+}
+
+.cardHeader {
+  display: flex; flex-direction: column; align-items: center; margin-bottom: 1.5rem; gap: .15rem;
+}
+.appName { font-size: 1.6rem; font-weight: 800; color: var(--accent); letter-spacing: -.02em; }
+.appSub  { font-size: .8rem; color: var(--text2); }
+
+.planBox {
+  background: linear-gradient(135deg, rgba(99,102,241,.12), rgba(99,102,241,.05));
+  border: 1px solid rgba(99,102,241,.25);
+  border-radius: 12px; padding: 1.5rem; text-align: center; margin-bottom: 1.25rem;
+}
+
+.planPrice { font-size: 2.5rem; font-weight: 800; color: var(--accent); }
+.planPeriod { font-size: .85rem; color: var(--text2); margin-bottom: 1rem; }
+
+.planFeatures {
+  list-style: none; padding: 0; margin: 0; text-align: left;
+  display: flex; flex-direction: column; gap: .5rem;
+}
+.planFeatures li {
+  padding-left: 1.4rem; position: relative;
+  font-size: .85rem; color: var(--text);
+}
+.planFeatures li::before {
+  content: '✓'; position: absolute; left: 0;
+  color: var(--success); font-weight: 700;
+}
+
+.title { text-align: center; margin: .75rem 0 .5rem; }
+.desc { text-align: center; color: var(--text2); font-size: .88rem; line-height: 1.5; margin-bottom: 1.5rem; }
+
+.infoBox {
+  display: flex; align-items: flex-start; gap: .6rem;
+  padding: .8rem 1rem; background: rgba(234,179,8,.1);
+  border: 1px solid rgba(234,179,8,.3); border-radius: var(--radius);
+  font-size: .8rem; color: var(--text2); line-height: 1.4; margin-bottom: 1.25rem;
+}
+.infoBox svg { flex-shrink: 0; margin-top: 2px; color: var(--warning); }
+
+.moisSelector {
+  margin-bottom: 1rem;
+}
+.moisSelector label { font-size: .78rem; color: var(--text2); font-weight: 500; display: block; margin-bottom: .5rem; }
+
+.moisBtns { display: flex; gap: .5rem; }
+
+.moisBtn {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0;
+  padding: .6rem .4rem; background: var(--bg3); border: 1px solid transparent;
+  border-radius: var(--radius); color: var(--text2); cursor: pointer;
+  font-size: .82rem; font-weight: 500; transition: all .15s;
+}
+.moisBtn:hover { border-color: var(--accent); }
+.moisActif { background: var(--accent); color: #fff; border-color: var(--accent); }
+.moisBtn small { font-size: .6rem; font-weight: 400; opacity: .75; }
+.moisActif small { opacity: .9; }
+
+.totalRow {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: .8rem 0; margin-bottom: .5rem;
+  border-top: 1px solid var(--bg3); font-size: .9rem; color: var(--text2);
+}
+.totalPrice { font-size: 1.3rem; font-weight: 700; color: var(--text); }
+
+.btnPrimary {
+  display: flex; align-items: center; justify-content: center; gap: .5rem;
+  width: 100%; padding: .8rem 1.5rem; background: var(--accent); color: #fff;
+  border: none; border-radius: var(--radius); font-size: .95rem;
+  font-weight: 600; cursor: pointer; transition: opacity .2s;
+}
+.btnPrimary:disabled { opacity: .5; cursor: not-allowed; }
+.btnPrimary:hover:not(:disabled) { opacity: .9; }
+
+.btnLogout {
+  display: flex; align-items: center; justify-content: center; gap: .5rem;
+  width: 100%; padding: .7rem 1.5rem; margin-top: .7rem;
+  background: transparent; color: var(--text2); border: 1px solid var(--bg3);
+  border-radius: var(--radius); font-size: .82rem; cursor: pointer; transition: all .2s;
+}
+.btnLogout:hover { border-color: var(--danger); color: var(--danger); }
+
+.spin { animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg) } }
+
+.methodeSection { margin-bottom: 1rem; }
+.methodeSection label { font-size: .78rem; color: var(--text2); font-weight: 500; display: block; margin-bottom: .5rem; }
+
+.methodeGrid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: .5rem;
+}
+
+.methodeBtn {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .65rem .7rem; background: var(--bg3); border: 1px solid transparent;
+  border-radius: var(--radius); color: var(--text2); cursor: pointer;
+  font-size: .78rem; font-weight: 500; transition: all .15s;
+}
+.methodeBtn:hover { border-color: var(--accent); }
+.methodeActif { background: rgba(99,102,241,.15); border-color: var(--accent); color: var(--accent); }
+
+.phoneSection { margin-bottom: 1rem; }
+.phoneSection label { font-size: .78rem; color: var(--text2); font-weight: 500; display: block; margin-bottom: .4rem; }
+.phoneSection label small { font-weight: 400; opacity: .7; }
+
+.phoneInput {
+  width: 100%; padding: .7rem .9rem; background: var(--bg3);
+  border: 1px solid var(--bg3); border-radius: var(--radius);
+  color: var(--text); font-size: .9rem; outline: none; transition: border .15s;
+}
+.phoneInput:focus { border-color: var(--accent); }
+
+.error {
+  padding: .7rem 1rem; background: rgba(239,68,68,.12);
+  border: 1px solid var(--danger); border-radius: var(--radius);
+  color: var(--danger); font-size: .82rem; margin-bottom: 1rem;
+}
+
+.iconSuccess { color: var(--success); margin: 0 auto; display: block; }
+.iconFree { color: var(--accent); margin: 0 auto .5rem; display: block; }

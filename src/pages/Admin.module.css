@@ -1,0 +1,95 @@
+.page {
+  padding: 1.5rem 2rem;
+}
+
+.spin { animation: spin .8s linear infinite; margin: 4rem auto; display: block; }
+@keyframes spin { to { transform: rotate(360deg) } }
+
+.header { margin-bottom: 1.5rem; }
+
+.headerTop { display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem; }
+.iconShield { color: var(--accent); }
+
+.title { font-size: 1.3rem; font-weight: 700; color: var(--text); margin: 0; }
+.subtitle { font-size: .82rem; color: var(--text2); margin: 0; }
+
+.statsRow { display: flex; gap: 1rem; flex-wrap: wrap; }
+.stat {
+  display: flex; align-items: center; gap: .35rem;
+  padding: .5rem .8rem; background: var(--bg2); border-radius: var(--radius);
+  font-size: .78rem; color: var(--text2);
+}
+.stat svg { color: var(--accent); }
+.stat span { font-weight: 700; color: var(--text); font-size: .9rem; }
+
+.searchBox {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .6rem .8rem; background: var(--bg2); border-radius: var(--radius);
+  margin-bottom: 1rem; border: 1px solid transparent; transition: border .15s;
+}
+.searchBox:focus-within { border-color: var(--accent); }
+.searchBox svg { color: var(--text2); flex-shrink: 0; }
+.searchBox input {
+  flex: 1; background: none; border: none; outline: none;
+  color: var(--text); font-size: .85rem;
+}
+
+.error {
+  padding: .7rem 1rem; background: rgba(239,68,68,.12);
+  border: 1px solid var(--danger); border-radius: var(--radius);
+  color: var(--danger); font-size: .82rem; margin-bottom: 1rem;
+}
+
+.tableWrap {
+  background: var(--bg2); border-radius: var(--radius); overflow-x: auto;
+  border: 1px solid var(--bg3);
+}
+
+.table {
+  width: 100%; border-collapse: collapse; font-size: .82rem;
+}
+
+.table th {
+  text-align: left; padding: .75rem .8rem;
+  font-weight: 600; color: var(--text2); font-size: .75rem;
+  text-transform: uppercase; letter-spacing: .03em;
+  border-bottom: 1px solid var(--bg3); white-space: nowrap;
+}
+
+.table td {
+  padding: .65rem .8rem; color: var(--text); border-bottom: 1px solid var(--bg3);
+}
+
+.table tbody tr:hover { background: rgba(99,102,241,.04); }
+
+.cellId { color: var(--text2); font-size: .75rem; width: 40px; }
+.cellName { font-weight: 500; }
+.cellEmail { color: var(--text2); font-size: .78rem; }
+.cellCenter { text-align: center; }
+.cellDate { color: var(--text2); font-size: .78rem; white-space: nowrap; }
+
+.adminTag {
+  display: inline-block; margin-left: .4rem; padding: 1px 6px;
+  background: rgba(99,102,241,.15); color: var(--accent);
+  border-radius: 4px; font-size: .65rem; font-weight: 600;
+  vertical-align: middle;
+}
+
+.iconOk { color: var(--success); }
+.iconNo { color: var(--text2); opacity: .4; }
+
+.badgeActive {
+  display: inline-block; padding: 2px 8px; border-radius: 6px;
+  background: rgba(34,197,94,.12); color: var(--success);
+  font-size: .72rem; font-weight: 600;
+}
+.badgeFree {
+  display: inline-block; padding: 2px 8px; border-radius: 6px;
+  background: rgba(99,102,241,.12); color: var(--accent);
+  font-size: .72rem; font-weight: 600;
+}
+.badgeNone {
+  display: inline-block; padding: 2px 8px; border-radius: 6px;
+  background: rgba(234,179,8,.1); color: var(--warning);
+  font-size: .72rem; font-weight: 600;
+}
