@@ -1056,6 +1056,9 @@ export default function Explorateur() {
                   <a href={lienActif.href} target="_blank" rel="noreferrer" className={styles.contenuUrl}>
                     <ExternalLink size={12}/> {lienActif.href}
                   </a>
+                  <span style={{fontSize: 11, opacity: 0.6, marginLeft: 8}}>
+                    Cliquer ici pour voir les produits directement
+                  </span>
                 </div>
 
                 <div className={styles.legende}>
