@@ -522,6 +522,9 @@ export default function Explorateur() {
           disponibilite: p.disponibilite || '',
           conc1: conc1T,
           mini: miniT,
+          ean13: edits[`ean13_${p.reference}`] || null,
+          famille: edits[`famille_${p.reference}`] || null,
+          sous_famille: edits[`sous_famille_${p.reference}`] || null,
         })
         ok++
       } catch (e) {
@@ -537,7 +540,7 @@ export default function Explorateur() {
       let miniCalc = (parseFloat(p.prix) + ecoVal + frais) * 1.2
       if (p.site_excel === 'gpdis') miniCalc /= 0.98
       miniCalc = Math.round(miniCalc * 100) / 100
-      return { ...p, prix_excel: parseFloat(p.prix), mini: miniCalc, _dans_excel: true, _mis_a_jour: true }
+      return { ...p, ean13: edits[`ean13_${p.reference}`] || p.ean13, famille: edits[`famille_${p.reference}`] || p.famille, sous_famille: edits[`sous_famille_${p.reference}`] || p.sous_famille, prix_excel: parseFloat(p.prix), mini: miniCalc, _dans_excel: true, _mis_a_jour: true }
     }))
     if (cacheKeyProducts && siteInfo?.url) {
       const cached = getCache(cacheKeyProducts, 300000)
@@ -551,7 +554,7 @@ export default function Explorateur() {
           let miniCalc = (parseFloat(p.prix) + ecoVal + frais) * 1.2
           if (p.site_excel === 'gpdis') miniCalc /= 0.98
           miniCalc = Math.round(miniCalc * 100) / 100
-          return { ...p, prix_excel: parseFloat(p.prix), mini: miniCalc, _dans_excel: true, _mis_a_jour: true }
+          return { ...p, ean13: edits[`ean13_${p.reference}`] || p.ean13, famille: edits[`famille_${p.reference}`] || p.famille, sous_famille: edits[`sous_famille_${p.reference}`] || p.sous_famille, prix_excel: parseFloat(p.prix), mini: miniCalc, _dans_excel: true, _mis_a_jour: true }
         })
         setCache(cacheKeyProducts, { ...cached, produits: updated })
         localStorage.setItem(`explo_produits_local_${siteInfo.url}`, JSON.stringify(updated))
@@ -582,12 +585,14 @@ export default function Explorateur() {
         disponibilite: produit.disponibilite || '',
         conc1: conc1Val,
         mini: miniCalc,
+        ean13: edits[`ean13_${ref}`] || null,
+        famille: edits[`famille_${ref}`] || null,
+        sous_famille: edits[`sous_famille_${ref}`] || null,
       })
 
       const updater = (p) => {
         if (p.reference !== ref) return p
-        const updated = { ...p, prix_excel: parseFloat(produit.prix), mini: miniCalc, _dans_excel: true, prix_comparer: conc1Val || p.prix_comparer }
-        return updated
+        return { ...p, prix_excel: parseFloat(produit.prix), mini: miniCalc, _dans_excel: true, prix_comparer: conc1Val || p.prix_comparer, ean13: edits[`ean13_${ref}`] || p.ean13, famille: edits[`famille_${ref}`] || p.famille, sous_famille: edits[`sous_famille_${ref}`] || p.sous_famille }
       }
       setProduits(prev => prev.map(updater))
       if (cacheKeyProducts && siteInfo?.url) {
@@ -634,21 +639,23 @@ export default function Explorateur() {
       let miniCalcule = (parseFloat(produit.prix) + ecoPartForCalc + frais) * 1.2
       if (site === 'gpdis') miniCalcule /= 0.98
       const miniArrondi = Math.round(miniCalcule * 100) / 100
+      const refFinale = edits[`ref_${key}`] || produit.reference
+      const nomFinal = edits[`nom_${key}`] || produit.nom
       await axios.post('/api/excel/ajouter-produit', {
-        reference: produit.reference, nom: produit.nom,
+        reference: refFinale, nom: nomFinal,
         prix: produit.prix, site: site,
         eco_part: ecoPartFinal,
         conc1: prixCoparFinal,
         mini: miniArrondi,
-        ean13: produit.ean13 || null,
-        famille: produit.famille || null,
-        sous_famille: produit.sous_famille || null,
+        ean13: edits[`ean13_${key}`] || produit.ean13 || null,
+        famille: edits[`famille_${key}`] || produit.famille || null,
+        sous_famille: edits[`sous_famille_${key}`] || produit.sous_famille || null,
         marque: produit.marque || null,
         disponibilite: produit.disponibilite || null,
       })
       const majProduits = prev => prev.map(p =>
         (p.reference === produit.reference && p.nom === produit.nom)
-          ? { ...p, _dans_excel: true, prix_excel: parseFloat(produit.prix), mini: miniArrondi, eco_part: ecoPartFinal, prix_comparer: prixCoparFinal || p.prix_comparer } : p
+          ? { ...p, reference: refFinale, nom: nomFinal, ean13: edits[`ean13_${key}`] || p.ean13, famille: edits[`famille_${key}`] || p.famille, sous_famille: edits[`sous_famille_${key}`] || p.sous_famille, _dans_excel: true, prix_excel: parseFloat(produit.prix), mini: miniArrondi, eco_part: ecoPartFinal, prix_comparer: prixCoparFinal || p.prix_comparer } : p
       )
       setProduits(majProduits)
       if (cacheKeyProducts && siteInfo?.url) {
@@ -656,7 +663,7 @@ export default function Explorateur() {
         if (cached?.produits) {
           const updated = cached.produits.map(p =>
             (p.reference === produit.reference && p.nom === produit.nom)
-              ? { ...p, _dans_excel: true, prix_excel: parseFloat(produit.prix), mini: miniArrondi, eco_part: ecoPartFinal, prix_comparer: prixCoparFinal || p.prix_comparer } : p
+              ? { ...p, reference: refFinale, nom: nomFinal, ean13: edits[`ean13_${key}`] || p.ean13, famille: edits[`famille_${key}`] || p.famille, sous_famille: edits[`sous_famille_${key}`] || p.sous_famille, _dans_excel: true, prix_excel: parseFloat(produit.prix), mini: miniArrondi, eco_part: ecoPartFinal, prix_comparer: prixCoparFinal || p.prix_comparer } : p
           )
           setCache(cacheKeyProducts, { ...cached, produits: updated })
           localStorage.setItem(`explo_produits_local_${siteInfo.url}`, JSON.stringify(updated))
@@ -674,7 +681,7 @@ export default function Explorateur() {
         const conc1Final = pcVal || produit.prix_comparer || null
         const majProduits = prev => prev.map(p =>
           (p.reference === produit.reference && p.nom === produit.nom)
-            ? { ...p, _dans_excel: true, prix_excel: parseFloat(produit.prix), mini: miniFinal409, eco_part: ecoPartFinal409, prix_comparer: conc1Final || p.prix_comparer } : p
+            ? { ...p, reference: refFinale, nom: nomFinal, ean13: edits[`ean13_${key}`] || p.ean13, famille: edits[`famille_${key}`] || p.famille, sous_famille: edits[`sous_famille_${key}`] || p.sous_famille, _dans_excel: true, prix_excel: parseFloat(produit.prix), mini: miniFinal409, eco_part: ecoPartFinal409, prix_comparer: conc1Final || p.prix_comparer } : p
         )
         setProduits(majProduits)
         if (cacheKeyProducts && siteInfo?.url) {
@@ -682,7 +689,7 @@ export default function Explorateur() {
           if (cached?.produits) {
             const updated = cached.produits.map(p =>
               (p.reference === produit.reference && p.nom === produit.nom)
-                ? { ...p, _dans_excel: true, prix_excel: parseFloat(produit.prix), mini: miniFinal409, eco_part: ecoPartFinal409, prix_comparer: conc1Final || p.prix_comparer } : p
+                ? { ...p, reference: refFinale, nom: nomFinal, ean13: edits[`ean13_${key}`] || p.ean13, famille: edits[`famille_${key}`] || p.famille, sous_famille: edits[`sous_famille_${key}`] || p.sous_famille, _dans_excel: true, prix_excel: parseFloat(produit.prix), mini: miniFinal409, eco_part: ecoPartFinal409, prix_comparer: conc1Final || p.prix_comparer } : p
             )
             setCache(cacheKeyProducts, { ...cached, produits: updated })
             localStorage.setItem(`explo_produits_local_${siteInfo.url}`, JSON.stringify(updated))
@@ -1114,11 +1121,91 @@ export default function Explorateur() {
                                   : <span className={styles.noImg}>—</span>
                                 }
                               </td>
-                              <td><code className={styles.ref}>{p.reference || '—'}</code></td>
-                              <td><span className={styles.ean}>{p.ean13 || '—'}</span></td>
-                              <td><span className={styles.famille}>{p.famille || '—'}</span></td>
-                              <td><span className={styles.sousFamille}>{p.sous_famille || '—'}</span></td>
-                              <td>{p.nom || '—'}</td>
+                              <td>
+                                {p.reference ? (
+                                  <code className={styles.ref}>{p.reference}</code>
+                                ) : (
+                                  <div style={{display:'flex', gap:4, alignItems:'center'}}>
+                                    <span className={styles.badgeGris}>—</span>
+                                    <input type="text"
+                                      value={edits[`ref_${key}`] ?? ''}
+                                      onChange={e => setEdits(prev => ({...prev, [`ref_${key}`]: e.target.value}))}
+                                      placeholder="Réf."
+                                      className={styles.editInput}
+                                      onClick={e => e.stopPropagation()}
+                                      style={{maxWidth:140}}
+                                    />
+                                  </div>
+                                )}
+                              </td>
+                              <td>
+                                {p.ean13 ? (
+                                  <span className={styles.ean}>{p.ean13}</span>
+                                ) : (
+                                  <div style={{display:'flex', gap:4, alignItems:'center'}}>
+                                    <span className={styles.badgeGris}>—</span>
+                                    <input type="text"
+                                      value={edits[`ean13_${key}`] ?? ''}
+                                      onChange={e => setEdits(prev => ({...prev, [`ean13_${key}`]: e.target.value}))}
+                                      placeholder="EAN13"
+                                      className={styles.editInput}
+                                      onClick={e => e.stopPropagation()}
+                                      style={{maxWidth:140}}
+                                    />
+                                  </div>
+                                )}
+                              </td>
+                              <td>
+                                {p.famille ? (
+                                  <span className={styles.famille}>{p.famille}</span>
+                                ) : (
+                                  <div style={{display:'flex', gap:4, alignItems:'center'}}>
+                                    <span className={styles.badgeGris}>—</span>
+                                    <input type="text"
+                                      value={edits[`famille_${key}`] ?? ''}
+                                      onChange={e => setEdits(prev => ({...prev, [`famille_${key}`]: e.target.value}))}
+                                      placeholder="Famille"
+                                      className={styles.editInput}
+                                      onClick={e => e.stopPropagation()}
+                                      style={{maxWidth:140}}
+                                    />
+                                  </div>
+                                )}
+                              </td>
+                              <td>
+                                {p.sous_famille ? (
+                                  <span className={styles.sousFamille}>{p.sous_famille}</span>
+                                ) : (
+                                  <div style={{display:'flex', gap:4, alignItems:'center'}}>
+                                    <span className={styles.badgeGris}>—</span>
+                                    <input type="text"
+                                      value={edits[`sous_famille_${key}`] ?? ''}
+                                      onChange={e => setEdits(prev => ({...prev, [`sous_famille_${key}`]: e.target.value}))}
+                                      placeholder="Sous-famille"
+                                      className={styles.editInput}
+                                      onClick={e => e.stopPropagation()}
+                                      style={{maxWidth:140}}
+                                    />
+                                  </div>
+                                )}
+                              </td>
+                              <td>
+                                {p.nom ? (
+                                  p.nom
+                                ) : (
+                                  <div style={{display:'flex', gap:4, alignItems:'center'}}>
+                                    <span className={styles.badgeGris}>—</span>
+                                    <input type="text"
+                                      value={edits[`nom_${key}`] ?? ''}
+                                      onChange={e => setEdits(prev => ({...prev, [`nom_${key}`]: e.target.value}))}
+                                      placeholder="Nom"
+                                      className={styles.editInput}
+                                      onClick={e => e.stopPropagation()}
+                                      style={{maxWidth:180}}
+                                    />
+                                  </div>
+                                )}
+                              </td>
                               <td><span className={styles.dispo} title={p.stock_depots || ''} style={
                                 p.disponibilite === 'En stock' || p.disponibilite === 'Disponible' ? {color:'#22c55e', fontWeight:700} :
                                 p.disponibilite === 'Sur commande' ? {color:'#eab308', fontWeight:700} :
