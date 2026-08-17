@@ -578,7 +578,7 @@ export default function Explorateur() {
       if (produit.site_excel === 'gpdis') miniCalc /= 0.98
       miniCalc = Math.round(miniCalc * 100) / 100
       const conc1Val = edits[`pc_${ref}`] || produit.prix_comparer || null
-      await axios.post('/api/excel/mettre-a-jour', {
+      const res = await axios.post('/api/excel/mettre-a-jour', {
         reference: ref,
         site: produit.site_excel || 'cedi',
         prix: produit.prix,
@@ -589,6 +589,7 @@ export default function Explorateur() {
         famille: edits[`famille_${ref}`] || null,
         sous_famille: edits[`sous_famille_${ref}`] || null,
       })
+      const backendMisAJour = res.data?.mis_a_jour ?? 1
 
       const updater = (p) => {
         if (p.reference !== ref) return p
@@ -604,7 +605,11 @@ export default function Explorateur() {
         }
       }
       setAjoutsEnCours(prev => ({ ...prev, [key]: 'done' }))
-      setToast({ message: `"${ref}" mis à jour`, type: 'success' })
+      if (backendMisAJour > 0) {
+        setToast({ message: `"${ref}" mis à jour`, type: 'success' })
+      } else {
+        setToast({ message: `"${ref}" — aucun changement`, type: 'info' })
+      }
       setTimeout(() => setToast(null), 3000)
     } catch (e) {
       const msg = e.response?.data?.erreur || 'Erreur mise à jour'
