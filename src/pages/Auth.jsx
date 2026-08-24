@@ -31,10 +31,10 @@ export default function Auth() {
       if (mode === 'register') {
         if (password !== confirm) { setError('Les mots de passe ne correspondent pas'); setLoading(false); return }
         const r = await register(fullName, email, password)
+        setMessage(r.message)
         if (!r.est_aris) {
-          setMessage('Compte créé ! Après confirmation par email, connectez-vous et souscrivez à un abonnement pour accéder à l\'application.')
-        } else {
-          setMessage(r.message)
+          setError(null)
+          setMessage(r.message + ' Après approbation, connectez-vous et souscrivez à un abonnement pour accéder à l\'application.')
         }
       } else {
         const r = await login(email, password, remember)
