@@ -511,9 +511,7 @@ export default function Explorateur() {
         const ecoValT = edits[`eco_${p.reference}`] !== undefined && edits[`eco_${p.reference}`] !== ''
           ? parseFloat(edits[`eco_${p.reference}`])
           : (parseFloat(p.eco_part_site) || parseFloat(p.eco_part) || 0)
-        let miniT = (parseFloat(p.prix) + ecoValT + fraisT) * 1.2
-        if (p.site_excel === 'gpdis') miniT /= 0.98
-        miniT = Math.round(miniT * 100) / 100
+        let miniT = calculerMiniUnifie(p, ecoValT) || Math.round((parseFloat(p.prix) + ecoValT + fraisT) * 1.2 / 0.98 * 100) / 100
         const conc1T = edits[`pc_${p.reference}`] || p.prix_comparer || null
         await axios.post('/api/excel/mettre-a-jour', {
           reference: p.reference,
@@ -537,9 +535,7 @@ export default function Explorateur() {
       const ecoVal = edits[`eco_${p.reference}`] !== undefined && edits[`eco_${p.reference}`] !== ''
         ? parseFloat(edits[`eco_${p.reference}`])
         : (parseFloat(p.eco_part_site) || parseFloat(p.eco_part) || 0)
-      let miniCalc = (parseFloat(p.prix) + ecoVal + frais) * 1.2
-      if (p.site_excel === 'gpdis') miniCalc /= 0.98
-      miniCalc = Math.round(miniCalc * 100) / 100
+      const miniCalc = calculerMiniUnifie(p, ecoVal) || Math.round((parseFloat(p.prix) + ecoVal + frais) * 1.2 / 0.98 * 100) / 100
       return { ...p, ean13: edits[`ean13_${p.reference}`] || p.ean13, famille: edits[`famille_${p.reference}`] || p.famille, sous_famille: edits[`sous_famille_${p.reference}`] || p.sous_famille, prix_excel: parseFloat(p.prix), mini: miniCalc, _dans_excel: true, _mis_a_jour: true }
     }))
     if (cacheKeyProducts && siteInfo?.url) {
@@ -551,9 +547,7 @@ export default function Explorateur() {
           const ecoVal = edits[`eco_${p.reference}`] !== undefined && edits[`eco_${p.reference}`] !== ''
             ? parseFloat(edits[`eco_${p.reference}`])
             : (parseFloat(p.eco_part_site) || parseFloat(p.eco_part) || 0)
-          let miniCalc = (parseFloat(p.prix) + ecoVal + frais) * 1.2
-          if (p.site_excel === 'gpdis') miniCalc /= 0.98
-          miniCalc = Math.round(miniCalc * 100) / 100
+          const miniCalc = calculerMiniUnifie(p, ecoVal) || Math.round((parseFloat(p.prix) + ecoVal + frais) * 1.2 / 0.98 * 100) / 100
           return { ...p, ean13: edits[`ean13_${p.reference}`] || p.ean13, famille: edits[`famille_${p.reference}`] || p.famille, sous_famille: edits[`sous_famille_${p.reference}`] || p.sous_famille, prix_excel: parseFloat(p.prix), mini: miniCalc, _dans_excel: true, _mis_a_jour: true }
         })
         setCache(cacheKeyProducts, { ...cached, produits: updated })
@@ -574,9 +568,7 @@ export default function Explorateur() {
       const ecoVal = edits[`eco_${ref}`] !== undefined && edits[`eco_${ref}`] !== ''
         ? parseFloat(edits[`eco_${ref}`])
         : (parseFloat(produit.eco_part_site) || parseFloat(produit.eco_part) || 0)
-      let miniCalc = (parseFloat(produit.prix) + ecoVal + frais) * 1.2
-      if (produit.site_excel === 'gpdis') miniCalc /= 0.98
-      miniCalc = Math.round(miniCalc * 100) / 100
+      const miniCalc = calculerMiniUnifie(produit, ecoVal) || Math.round((parseFloat(produit.prix) + ecoVal + frais) * 1.2 / 0.98 * 100) / 100
       const conc1Val = edits[`pc_${ref}`] || produit.prix_comparer || null
       const res = await axios.post('/api/excel/mettre-a-jour', {
         reference: ref,
@@ -641,9 +633,7 @@ export default function Explorateur() {
       const ecoPartFinal = (ecoVal !== undefined && ecoVal !== '') ? parseFloat(ecoVal) : (parseFloat(produit.eco_part_site) || parseFloat(produit.eco_part) || null)
       const prixCoparFinal = pcVal || produit.prix_comparer || null
       const ecoPartForCalc = (ecoVal !== undefined && ecoVal !== '') ? parseFloat(ecoVal) : (parseFloat(produit.eco_part_site) || parseFloat(produit.eco_part) || 0)
-      let miniCalcule = (parseFloat(produit.prix) + ecoPartForCalc + frais) * 1.2
-      if (site === 'gpdis') miniCalcule /= 0.98
-      const miniArrondi = Math.round(miniCalcule * 100) / 100
+      const miniArrondi = calculerMiniUnifie(produit, ecoPartForCalc) || Math.round((parseFloat(produit.prix) + ecoPartForCalc + frais) * 1.2 / 0.98 * 100) / 100
       const refFinale = edits[`ref_${key}`] || produit.reference
       const nomFinal = edits[`nom_${key}`] || produit.nom
       await axios.post('/api/excel/ajouter-produit', {
@@ -682,7 +672,7 @@ export default function Explorateur() {
       if (e.response?.status === 409 && msg.includes('existe déjà')) {
         const frais = detecterFrais(produit.nom)
         const ecoPartFinal409 = (ecoVal !== undefined && ecoVal !== '') ? parseFloat(ecoVal) : (parseFloat(produit.eco_part_site) || parseFloat(produit.eco_part) || null)
-        const miniFinal409 = Math.round(((parseFloat(produit.prix) + (ecoPartFinal409 || 0) + frais) * (site === 'gpdis' ? 1.2 / 0.98 : 1.2)) * 100) / 100
+        const miniFinal409 = calculerMiniUnifie(produit, ecoPartFinal409 || 0) || Math.round(((parseFloat(produit.prix) + (ecoPartFinal409 || 0) + frais) * 1.2 / 0.98) * 100) / 100
         const conc1Final = pcVal || produit.prix_comparer || null
         const majProduits = prev => prev.map(p =>
           (p.reference === produit.reference && p.nom === produit.nom)
@@ -834,14 +824,37 @@ export default function Explorateur() {
 
   const detecterFrais = (nom) => {
     const n = (nom || '').toUpperCase()
-    const GRANDS = [
+    const TRES_GRANDS = [
       'REFRIGERATEUR', 'CONGELATEUR', 'CAVE A VIN', 'CAVE-A-VIN',
+      'AMERICAIN', 'CONGELATEUR COFFRE', 'CONGELATEUR VERTICAL', 'ARM'
+    ]
+    const GRANDS = [
       'LAVE LINGE', 'LAVE-LINGE', 'SECHE LINGE', 'SECHE-LINGE',
       'LAVE VAISSELLE', 'LAVE-VAISSELLE', 'CUISINIERE', 'CUISIERE',
-      'PIANO DE CUISSON', 'PIANO-DE-CUISSON', 'FOUR',
-      'AMERICAIN', 'CONGELATEUR COFFRE', 'CONGELATEUR VERTICAL'
+      'PIANO DE CUISSON', 'PIANO-DE-CUISSON', 'FOUR', 'FOURS',
+      'HOTTE', 'TABLE DE CUISSON', 'PLAQUE DE CUISSON', 'PLAN DE CUISSON'
     ]
-    return GRANDS.some(g => n.includes(g)) ? 80 : 60
+    const MOYENS = ['MICRO ONDES', 'MICRO-ONDES', 'CAFE', 'CAFETIERE']
+    if (TRES_GRANDS.some(g => n.includes(g))) return 80
+    if (GRANDS.some(g => n.includes(g))) return 75
+    if (MOYENS.some(g => n.includes(g))) return 60
+    return 50
+  }
+
+  // Calcule le prix mini avec la formule unique cohérente avec le backend :
+  // mini = (min{CEDI,SOGAM,GPDIS,FINDIS, prix scrapé} + frais + eco) * 1.2 / 0.98
+  // indépendant du site visité, PEG exclu.
+  const calculerMiniUnifie = (produit, ecoVal) => {
+    const ecarts4 = Object.values(produit.excel_prices || {}).map(v => parseFloat(v)).filter(v => !isNaN(v))
+    let prixMin = ecarts4.length ? Math.min(...ecarts4) : Infinity
+    if (produit.prix != null) {
+      const sp = parseFloat(produit.prix)
+      if (!isNaN(sp)) prixMin = Math.min(prixMin, sp)
+    }
+    if (!isFinite(prixMin)) return null
+    const eco = isNaN(parseFloat(ecoVal)) ? 0 : parseFloat(ecoVal)
+    const frais = detecterFrais(produit.nom)
+    return Math.round((prixMin + frais + eco) * 1.2 / 0.98 * 100) / 100
   }
 
   const couleur = (p) => {
@@ -1532,8 +1545,7 @@ export default function Explorateur() {
                             : (modalAjout.eco_part_site != null ? parseFloat(modalAjout.eco_part_site)
                               : (modalAjout.eco_part != null ? parseFloat(modalAjout.eco_part) : 0))
                           const fraisM = detecterFrais(modalAjout.nom)
-                          let miniM = (parseFloat(modalAjout.prix) + ecoV + fraisM) * 1.2
-                          if (detecterSite(urlRef.current) === 'gpdis') miniM /= 0.98
+                          const miniM = calculerMiniUnifie(modalAjout, ecoV) || Math.round((parseFloat(modalAjout.prix) + ecoV + fraisM) * 1.2 / 0.98 * 100) / 100
                           return miniM.toFixed(2) + ' €'
                         })()
                       else if (n(col).includes('EAN') || n(col) === 'GENCOD')
