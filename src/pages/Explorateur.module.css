@@ -238,6 +238,7 @@
 .colPrixSite { width: 90px; min-width: 80px; }
 .colEco      { width: 75px; min-width: 65px; }
 .colMini     { width: 100px; min-width: 85px; }
+.colFrais    { width: 70px; min-width: 60px; }
 .colComparer { width: 160px; min-width: 130px; }
 .colPdf      { width: 120px; min-width: 100px; }
 .colStatut   { width: 90px; min-width: 75px; }

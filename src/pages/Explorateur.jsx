@@ -494,13 +494,14 @@ export default function Explorateur() {
     let ok = 0, fail = 0
     for (const p of a_mettre_a_jour) {
       try {
-        const fraisT = detecterFrais(p.nom)
+        const fraisEditT = edits[`frais_${p.reference}`] !== undefined && edits[`frais_${p.reference}`] !== ''
+        const fraisT = fraisEditT ? parseFloat(edits[`frais_${p.reference}`]) : detecterFrais(p.nom)
         const ecoValT = edits[`eco_${p.reference}`] !== undefined && edits[`eco_${p.reference}`] !== ''
           ? parseFloat(edits[`eco_${p.reference}`])
           : (parseFloat(p.eco_part_site) || parseFloat(p.eco_part) || 0)
-        let miniT = p.mini != null
+        let miniT = (p.mini != null && !fraisEditT)
           ? parseFloat(p.mini)
-          : (calculerMiniUnifie(p, ecoValT) || Math.round((parseFloat(p.prix) + ecoValT + fraisT) * 1.2 / 0.98 * 100) / 100)
+          : (calculerMiniUnifie(p, ecoValT, fraisT) || Math.round((parseFloat(p.prix) + ecoValT + fraisT) * 1.2 / 0.98 * 100) / 100)
         const conc1T = edits[`pc_${p.reference}`] || p.prix_comparer || null
         await axios.post('/api/excel/mettre-a-jour', {
           reference: p.reference,
@@ -520,13 +521,14 @@ export default function Explorateur() {
     }
     setProduits(prev => prev.map(p => {
       if (!a_mettre_a_jour.some(aj => aj.reference === p.reference)) return p
-      const frais = detecterFrais(p.nom)
+      const fraisEdit = edits[`frais_${p.reference}`] !== undefined && edits[`frais_${p.reference}`] !== ''
+      const frais = fraisEdit ? parseFloat(edits[`frais_${p.reference}`]) : detecterFrais(p.nom)
       const ecoVal = edits[`eco_${p.reference}`] !== undefined && edits[`eco_${p.reference}`] !== ''
         ? parseFloat(edits[`eco_${p.reference}`])
         : (parseFloat(p.eco_part_site) || parseFloat(p.eco_part) || 0)
-      const miniCalc = p.mini != null
+      const miniCalc = (p.mini != null && !fraisEdit)
         ? parseFloat(p.mini)
-        : (calculerMiniUnifie(p, ecoVal) || Math.round((parseFloat(p.prix) + ecoVal + frais) * 1.2 / 0.98 * 100) / 100)
+        : (calculerMiniUnifie(p, ecoVal, frais) || Math.round((parseFloat(p.prix) + ecoVal + frais) * 1.2 / 0.98 * 100) / 100)
       return { ...p, ean13: edits[`ean13_${p.reference}`] || p.ean13, famille: edits[`famille_${p.reference}`] || p.famille, sous_famille: edits[`sous_famille_${p.reference}`] || p.sous_famille, prix_excel: parseFloat(p.prix), mini: miniCalc, _dans_excel: true, _mis_a_jour: true }
     }))
     if (cacheKeyProducts && siteInfo?.url) {
@@ -534,13 +536,14 @@ export default function Explorateur() {
       if (cached?.produits) {
         const updated = cached.produits.map(p => {
           if (!a_mettre_a_jour.some(aj => aj.reference === p.reference)) return p
-          const frais = detecterFrais(p.nom)
+          const fraisEdit = edits[`frais_${p.reference}`] !== undefined && edits[`frais_${p.reference}`] !== ''
+          const frais = fraisEdit ? parseFloat(edits[`frais_${p.reference}`]) : detecterFrais(p.nom)
           const ecoVal = edits[`eco_${p.reference}`] !== undefined && edits[`eco_${p.reference}`] !== ''
             ? parseFloat(edits[`eco_${p.reference}`])
             : (parseFloat(p.eco_part_site) || parseFloat(p.eco_part) || 0)
-          const miniCalc = p.mini != null
+          const miniCalc = (p.mini != null && !fraisEdit)
             ? parseFloat(p.mini)
-            : (calculerMiniUnifie(p, ecoVal) || Math.round((parseFloat(p.prix) + ecoVal + frais) * 1.2 / 0.98 * 100) / 100)
+            : (calculerMiniUnifie(p, ecoVal, frais) || Math.round((parseFloat(p.prix) + ecoVal + frais) * 1.2 / 0.98 * 100) / 100)
           return { ...p, ean13: edits[`ean13_${p.reference}`] || p.ean13, famille: edits[`famille_${p.reference}`] || p.famille, sous_famille: edits[`sous_famille_${p.reference}`] || p.sous_famille, prix_excel: parseFloat(p.prix), mini: miniCalc, _dans_excel: true, _mis_a_jour: true }
         })
         setCache(cacheKeyProducts, { ...cached, produits: updated })
@@ -548,6 +551,11 @@ export default function Explorateur() {
       }
     }
     setToast({ message: `✅ ${ok} produit(s) A jour${fail ? ` (${fail} échoué(s))` : ''}`, type: 'success' })
+    setEdits(prev => {
+      const n = {...prev}
+      for (const p of a_mettre_a_jour) delete n[`frais_${p.reference}`]
+      return n
+    })
     setTimeout(() => setToast(null), 5000)
     setLotMajLoading(false)
   }
@@ -557,13 +565,14 @@ export default function Explorateur() {
     const key = `update_${ref}`
     setAjoutsEnCours(prev => ({ ...prev, [key]: 'loading' }))
     try {
-      const frais = detecterFrais(produit.nom)
+      const fraisEdit = edits[`frais_${ref}`] !== undefined && edits[`frais_${ref}`] !== ''
+      const frais = fraisEdit ? parseFloat(edits[`frais_${ref}`]) : detecterFrais(produit.nom)
       const ecoVal = edits[`eco_${ref}`] !== undefined && edits[`eco_${ref}`] !== ''
         ? parseFloat(edits[`eco_${ref}`])
         : (parseFloat(produit.eco_part_site) || parseFloat(produit.eco_part) || 0)
-      const miniCalc = produit.mini != null
+      const miniCalc = (produit.mini != null && !fraisEdit)
         ? parseFloat(produit.mini)
-        : (calculerMiniUnifie(produit, ecoVal) || Math.round((parseFloat(produit.prix) + ecoVal + frais) * 1.2 / 0.98 * 100) / 100)
+        : (calculerMiniUnifie(produit, ecoVal, frais) || Math.round((parseFloat(produit.prix) + ecoVal + frais) * 1.2 / 0.98 * 100) / 100)
       const conc1Val = edits[`pc_${ref}`] || produit.prix_comparer || null
       const res = await axios.post('/api/excel/mettre-a-jour', {
         reference: ref,
@@ -592,6 +601,7 @@ export default function Explorateur() {
         }
       }
       setAjoutsEnCours(prev => ({ ...prev, [key]: 'done' }))
+      setEdits(prev => { const n = {...prev}; delete n[`frais_${ref}`]; return n })
       if (backendMisAJour > 0) {
         setToast({ message: `"${ref}" mis à jour`, type: 'success' })
       } else {
@@ -619,18 +629,19 @@ export default function Explorateur() {
 
   const ajouterDansExcel = async (produit) => {
     const key = produit.reference || produit.nom
+    const fraisEdit = edits[`frais_${key}`] !== undefined && edits[`frais_${key}`] !== ''
+    const frais = fraisEdit ? parseFloat(edits[`frais_${key}`]) : detecterFrais(produit.nom)
     setAjoutsEnCours(prev => ({ ...prev, [key]: 'loading' }))
     try {
       const site = detecterSite(urlRef.current)
       const ecoVal = edits[`eco_${key}`]
       const pcVal = edits[`pc_${key}`]
-      const frais = detecterFrais(produit.nom)
       const ecoPartFinal = (ecoVal !== undefined && ecoVal !== '') ? parseFloat(ecoVal) : (parseFloat(produit.eco_part_site) || parseFloat(produit.eco_part) || null)
       const prixCoparFinal = pcVal || produit.prix_comparer || null
       const ecoPartForCalc = (ecoVal !== undefined && ecoVal !== '') ? parseFloat(ecoVal) : (parseFloat(produit.eco_part_site) || parseFloat(produit.eco_part) || 0)
-      const miniArrondi = produit.mini != null
+      const miniArrondi = (produit.mini != null && !fraisEdit)
         ? parseFloat(produit.mini)
-        : (calculerMiniUnifie(produit, ecoPartForCalc) || Math.round((parseFloat(produit.prix) + ecoPartForCalc + frais) * 1.2 / 0.98 * 100) / 100)
+        : (calculerMiniUnifie(produit, ecoPartForCalc, frais) || Math.round((parseFloat(produit.prix) + ecoPartForCalc + frais) * 1.2 / 0.98 * 100) / 100)
       const refFinale = edits[`ref_${key}`] || produit.reference
       const nomFinal = edits[`nom_${key}`] || produit.nom
       await axios.post('/api/excel/ajouter-produit', {
@@ -662,16 +673,16 @@ export default function Explorateur() {
         }
       }
       setAjoutsEnCours(prev => ({ ...prev, [key]: 'done' }))
+      setEdits(prev => { const n = {...prev}; delete n[`frais_${key}`]; return n })
       setToast({ message: `"${produit.reference || produit.nom}" ajouté à l'Excel`, type: 'success' })
       setTimeout(() => setToast(null), 3000)
     } catch (e) {
       const msg = e.response?.data?.erreur || 'Erreur ajout'
       if (e.response?.status === 409 && msg.includes('existe déjà')) {
-        const frais = detecterFrais(produit.nom)
         const ecoPartFinal409 = (ecoVal !== undefined && ecoVal !== '') ? parseFloat(ecoVal) : (parseFloat(produit.eco_part_site) || parseFloat(produit.eco_part) || null)
-        const miniFinal409 = produit.mini != null
+        const miniFinal409 = (produit.mini != null && !fraisEdit)
           ? parseFloat(produit.mini)
-          : (calculerMiniUnifie(produit, ecoPartFinal409 || 0) || Math.round(((parseFloat(produit.prix) + (ecoPartFinal409 || 0) + frais) * 1.2 / 0.98) * 100) / 100)
+          : (calculerMiniUnifie(produit, ecoPartFinal409 || 0, frais) || Math.round(((parseFloat(produit.prix) + (ecoPartFinal409 || 0) + frais) * 1.2 / 0.98) * 100) / 100)
         const conc1Final = pcVal || produit.prix_comparer || null
         const majProduits = prev => prev.map(p =>
           (p.reference === produit.reference && p.nom === produit.nom)
@@ -690,6 +701,7 @@ export default function Explorateur() {
           }
         }
         setAjoutsEnCours(prev => ({ ...prev, [key]: 'done' }))
+        setEdits(prev => { const n = {...prev}; delete n[`frais_${key}`]; return n })
         setToast({ message: `"${produit.reference || produit.nom}" est déjà dans l'Excel`, type: 'success' })
         setTimeout(() => setToast(null), 3000)
       } else {
@@ -822,7 +834,7 @@ export default function Explorateur() {
   }, [urlSaisie, marquesActives, lienActif, siteInfo, liens])
 
   const detecterFrais = (nom) => {
-    const n = (nom || '').toUpperCase()
+    const n = (nom || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     const TRES_GRANDS = [
       'REFRIGERATEUR', 'CONGELATEUR', 'CAVE A VIN', 'CAVE-A-VIN',
       'AMERICAIN', 'CONGELATEUR COFFRE', 'CONGELATEUR VERTICAL', 'ARM'
@@ -843,17 +855,46 @@ export default function Explorateur() {
   // Calcule le prix mini avec la formule unique cohérente avec le backend :
   // mini = (min{CEDI,SOGAM,GPDIS,FINDIS, prix scrapé} + frais + eco) * 1.2 / 0.98
   // indépendant du site visité, PEG exclu.
-  const calculerMiniUnifie = (produit, ecoVal) => {
+  const prixsMin = (produit) => {
     const ecarts4 = Object.values(produit.excel_prices || {}).map(v => parseFloat(v)).filter(v => !isNaN(v))
     let prixMin = ecarts4.length ? Math.min(...ecarts4) : Infinity
     if (produit.prix != null) {
       const sp = parseFloat(produit.prix)
       if (!isNaN(sp)) prixMin = Math.min(prixMin, sp)
     }
+    return prixMin
+  }
+  const calculerMiniUnifie = (produit, ecoVal, fraisOverride) => {
+    const prixMin = prixsMin(produit)
     if (!isFinite(prixMin)) return null
     const eco = isNaN(parseFloat(ecoVal)) ? 0 : parseFloat(ecoVal)
-    const frais = detecterFrais(produit.nom)
+    const frais = fraisOverride != null && !isNaN(parseFloat(fraisOverride))
+      ? parseFloat(fraisOverride)
+      : detecterFrais(produit.nom)
     return Math.round((prixMin + frais + eco) * 1.2 / 0.98 * 100) / 100
+  }
+
+  // Frais effectif d'une ligne : valeur personnalisée si saisie, sinon le frais
+  // réellement utilisé lors du calcul du mini (déduit du mini affiché) sinon auto.
+  const fraisUtilise = (p, key) => {
+    const v = edits[`frais_${key}`]
+    if (v !== undefined && v !== '') {
+      const n = parseFloat(v)
+      if (!isNaN(n)) return n
+    }
+    if (p.mini != null) {
+      const prixMin = prixsMin(p)
+      if (isFinite(prixMin)) {
+        const ecoVale = edits[`eco_${key}`] !== undefined && edits[`eco_${key}`] !== ''
+          ? parseFloat(edits[`eco_${key}`])
+          : (parseFloat(p.eco_part_site) != null ? parseFloat(p.eco_part_site)
+            : (parseFloat(p.eco_part) != null ? parseFloat(p.eco_part) : 0))
+        const eco = isNaN(ecoVale) ? 0 : ecoVale
+        const fraisCalc = (parseFloat(p.mini) * 0.98 / 1.2) - prixMin - eco
+        if (isFinite(fraisCalc)) return Math.round(fraisCalc * 100) / 100
+      }
+    }
+    return detecterFrais(p.nom)
   }
 
   const couleur = (p) => {
@@ -1119,17 +1160,21 @@ export default function Explorateur() {
                         <col className={styles.colPrixSite}/>
                         <col className={styles.colEco}/>
                         <col className={styles.colMini}/>
+                        <col className={styles.colFrais}/>
                         <col className={styles.colComparer}/>
                         <col className={styles.colPdf}/>
                         <col className={styles.colStatut}/>
                       </colgroup>
                       <thead>
-                        <tr><th>#</th><th>Photo</th><th>Réf.</th><th>EAN13</th><th>Famille</th><th>Sous-famille</th><th>Nom</th><th>Disponibilité</th><th>Prix Excel</th><th>Prix Site</th><th>Eco Part</th><th>Mini</th><th>Conc 1</th><th>PDF</th><th>Statut</th></tr>
+                        <tr><th>#</th><th>Photo</th><th>Réf.</th><th>EAN13</th><th>Famille</th><th>Sous-famille</th><th>Nom</th><th>Disponibilité</th><th>Prix Excel</th><th>Prix Site</th><th>Eco Part</th><th>Mini</th><th>Frais</th><th>Conc 1</th><th>PDF</th><th>Statut</th></tr>
                       </thead>
                       <tbody>
                         {produitsFiltres.map((p, i) => {
                           const key = p.reference || p.nom
                           const ajoutEtat = ajoutsEnCours[key]
+                          const prixChange = p.prix != null && p.prix_excel != null && Math.abs(parseFloat(p.prix) - parseFloat(p.prix_excel)) > 0.001
+                          const fraisSaisi = edits[`frais_${key}`] !== undefined && edits[`frais_${key}`] !== ''
+                          const montreMisAJour = (p._mis_a_jour === true || ajoutsEnCours[`update_${p.reference}`] === 'done') && !prixChange && !fraisSaisi
                           return (
                             <tr key={i} className={couleur(p)}>
                               <td className={styles.num}>{i+1}</td>
@@ -1339,6 +1384,16 @@ export default function Explorateur() {
                                   )}
                                 </span>
                               </td>
+                               <td>
+                                 <input type="number" step="0.01"
+                                   value={edits[`frais_${key}`] ?? fraisUtilise(p, key)}
+                                   onChange={e => setEdits(prev => ({...prev, [`frais_${key}`]: e.target.value}))}
+                                   title={`Frais utilisé pour le calcul du mini : ${fraisUtilise(p, key)} € (modifiable, recalcul au clic sur « à mettre à jour » / « à ajouter »)`}
+                                   className={styles.editInput}
+                                   onClick={e => e.stopPropagation()}
+                                   style={{width:56}}
+                                 />
+                               </td>
                                <td className={styles.comparer}>
                                   {p.prix_comparer != null ? (
                                     <span className={styles.comparerVal}>
@@ -1424,7 +1479,7 @@ export default function Explorateur() {
                               </td>
                               <td>
                                 {p._dans_excel === true && (
-                                  p._mis_a_jour || ajoutsEnCours[`update_${p.reference}`] === 'done'
+                                  montreMisAJour
                                     ? <span className={styles.badgeJaune}>✓ Mis à jour</span>
                                     : <button className={styles.btnMaj}
                                         onClick={() => mettreAJour(p)}
