@@ -211,6 +211,9 @@ export default function Explorateur() {
   }, [produits, siteInfo?.url, cacheKeyProducts, sauvegarderDansCache])
 
   // ── Modal d'ajout ─────────────────────────────────────────────
+  const [modalAjout,   setModalAjout]   = useState(null)
+  const [colonnesExcel, setColonnesExcel] = useState([])
+
   const toggleVerifie = (href, e) => {
     e.stopPropagation()
     setVerifiees(prev => {
@@ -225,6 +228,9 @@ export default function Explorateur() {
   const [historique, setHistorique] = useState([])
 
   useEffect(() => {
+    const cachedCols = getCache('excel_colonnes', 60000)
+    if (cachedCols) setColonnesExcel(cachedCols)
+
     const cachedHist = localStorage.getItem('historique_data')
     if (cachedHist) {
       try {
@@ -233,11 +239,18 @@ export default function Explorateur() {
       } catch {}
     }
 
-    axios.get('/api/historique').catch(() => ({ data: [] })).then(histRes => {
+    Promise.all([
+      axios.get('/api/historique').catch(() => ({ data: [] })),
+      axios.get('/api/excel/colonnes').catch(() => ({ data: { colonnes: ["REFERENCE","Nom","Prix"] } })),
+    ]).then(([histRes, colsRes]) => {
       if (histRes) {
         const data = histRes.data || []
         setHistorique(data)
         localStorage.setItem('historique_data', JSON.stringify({ data, ts: Date.now() }))
+      }
+      if (colsRes) {
+        setCache('excel_colonnes', colsRes.data.colonnes || [])
+        setColonnesExcel(colsRes.data.colonnes || [])
       }
     })
   }, [])
@@ -498,9 +511,7 @@ export default function Explorateur() {
         const ecoValT = edits[`eco_${p.reference}`] !== undefined && edits[`eco_${p.reference}`] !== ''
           ? parseFloat(edits[`eco_${p.reference}`])
           : (parseFloat(p.eco_part_site) || parseFloat(p.eco_part) || 0)
-        let miniT = p.mini != null
-          ? parseFloat(p.mini)
-          : (calculerMiniUnifie(p, ecoValT) || Math.round((parseFloat(p.prix) + ecoValT + fraisT) * 1.2 / 0.98 * 100) / 100)
+        let miniT = calculerMiniUnifie(p, ecoValT) || Math.round((parseFloat(p.prix) + ecoValT + fraisT) * 1.2 / 0.98 * 100) / 100
         const conc1T = edits[`pc_${p.reference}`] || p.prix_comparer || null
         await axios.post('/api/excel/mettre-a-jour', {
           reference: p.reference,
@@ -524,9 +535,7 @@ export default function Explorateur() {
       const ecoVal = edits[`eco_${p.reference}`] !== undefined && edits[`eco_${p.reference}`] !== ''
         ? parseFloat(edits[`eco_${p.reference}`])
         : (parseFloat(p.eco_part_site) || parseFloat(p.eco_part) || 0)
-      const miniCalc = p.mini != null
-        ? parseFloat(p.mini)
-        : (calculerMiniUnifie(p, ecoVal) || Math.round((parseFloat(p.prix) + ecoVal + frais) * 1.2 / 0.98 * 100) / 100)
+      const miniCalc = calculerMiniUnifie(p, ecoVal) || Math.round((parseFloat(p.prix) + ecoVal + frais) * 1.2 / 0.98 * 100) / 100
       return { ...p, ean13: edits[`ean13_${p.reference}`] || p.ean13, famille: edits[`famille_${p.reference}`] || p.famille, sous_famille: edits[`sous_famille_${p.reference}`] || p.sous_famille, prix_excel: parseFloat(p.prix), mini: miniCalc, _dans_excel: true, _mis_a_jour: true }
     }))
     if (cacheKeyProducts && siteInfo?.url) {
@@ -538,9 +547,7 @@ export default function Explorateur() {
           const ecoVal = edits[`eco_${p.reference}`] !== undefined && edits[`eco_${p.reference}`] !== ''
             ? parseFloat(edits[`eco_${p.reference}`])
             : (parseFloat(p.eco_part_site) || parseFloat(p.eco_part) || 0)
-          const miniCalc = p.mini != null
-            ? parseFloat(p.mini)
-            : (calculerMiniUnifie(p, ecoVal) || Math.round((parseFloat(p.prix) + ecoVal + frais) * 1.2 / 0.98 * 100) / 100)
+          const miniCalc = calculerMiniUnifie(p, ecoVal) || Math.round((parseFloat(p.prix) + ecoVal + frais) * 1.2 / 0.98 * 100) / 100
           return { ...p, ean13: edits[`ean13_${p.reference}`] || p.ean13, famille: edits[`famille_${p.reference}`] || p.famille, sous_famille: edits[`sous_famille_${p.reference}`] || p.sous_famille, prix_excel: parseFloat(p.prix), mini: miniCalc, _dans_excel: true, _mis_a_jour: true }
         })
         setCache(cacheKeyProducts, { ...cached, produits: updated })
@@ -561,9 +568,7 @@ export default function Explorateur() {
       const ecoVal = edits[`eco_${ref}`] !== undefined && edits[`eco_${ref}`] !== ''
         ? parseFloat(edits[`eco_${ref}`])
         : (parseFloat(produit.eco_part_site) || parseFloat(produit.eco_part) || 0)
-      const miniCalc = produit.mini != null
-        ? parseFloat(produit.mini)
-        : (calculerMiniUnifie(produit, ecoVal) || Math.round((parseFloat(produit.prix) + ecoVal + frais) * 1.2 / 0.98 * 100) / 100)
+      const miniCalc = calculerMiniUnifie(produit, ecoVal) || Math.round((parseFloat(produit.prix) + ecoVal + frais) * 1.2 / 0.98 * 100) / 100
       const conc1Val = edits[`pc_${ref}`] || produit.prix_comparer || null
       const res = await axios.post('/api/excel/mettre-a-jour', {
         reference: ref,
@@ -628,9 +633,7 @@ export default function Explorateur() {
       const ecoPartFinal = (ecoVal !== undefined && ecoVal !== '') ? parseFloat(ecoVal) : (parseFloat(produit.eco_part_site) || parseFloat(produit.eco_part) || null)
       const prixCoparFinal = pcVal || produit.prix_comparer || null
       const ecoPartForCalc = (ecoVal !== undefined && ecoVal !== '') ? parseFloat(ecoVal) : (parseFloat(produit.eco_part_site) || parseFloat(produit.eco_part) || 0)
-      const miniArrondi = produit.mini != null
-        ? parseFloat(produit.mini)
-        : (calculerMiniUnifie(produit, ecoPartForCalc) || Math.round((parseFloat(produit.prix) + ecoPartForCalc + frais) * 1.2 / 0.98 * 100) / 100)
+      const miniArrondi = calculerMiniUnifie(produit, ecoPartForCalc) || Math.round((parseFloat(produit.prix) + ecoPartForCalc + frais) * 1.2 / 0.98 * 100) / 100
       const refFinale = edits[`ref_${key}`] || produit.reference
       const nomFinal = edits[`nom_${key}`] || produit.nom
       await axios.post('/api/excel/ajouter-produit', {
@@ -669,9 +672,7 @@ export default function Explorateur() {
       if (e.response?.status === 409 && msg.includes('existe déjà')) {
         const frais = detecterFrais(produit.nom)
         const ecoPartFinal409 = (ecoVal !== undefined && ecoVal !== '') ? parseFloat(ecoVal) : (parseFloat(produit.eco_part_site) || parseFloat(produit.eco_part) || null)
-        const miniFinal409 = produit.mini != null
-          ? parseFloat(produit.mini)
-          : (calculerMiniUnifie(produit, ecoPartFinal409 || 0) || Math.round(((parseFloat(produit.prix) + (ecoPartFinal409 || 0) + frais) * 1.2 / 0.98) * 100) / 100)
+        const miniFinal409 = calculerMiniUnifie(produit, ecoPartFinal409 || 0) || Math.round(((parseFloat(produit.prix) + (ecoPartFinal409 || 0) + frais) * 1.2 / 0.98) * 100) / 100
         const conc1Final = pcVal || produit.prix_comparer || null
         const majProduits = prev => prev.map(p =>
           (p.reference === produit.reference && p.nom === produit.nom)
@@ -1101,8 +1102,8 @@ export default function Explorateur() {
                         onClick={toutMettreAJour}
                         disabled={lotMajLoading}>
                         {lotMajLoading
-                          ? <><Loader size={13} className={styles.spin}/> Mise à jour en cours...</>
-                          : <><RefreshCw size={13}/> Tout à mettre à jour</>}
+                          ? <><Loader size={13} className={styles.spin}/> Màj en cours...</>
+                          : <><RefreshCw size={13}/> Tout Màj</>}
                       </button>
                     </div>
                     <table className={styles.table}>
@@ -1430,20 +1431,20 @@ export default function Explorateur() {
                                         onClick={() => mettreAJour(p)}
                                         disabled={ajoutsEnCours[`update_${p.reference}`] === 'loading'}>
                                         {ajoutsEnCours[`update_${p.reference}`] === 'loading'
-                                          ? <><Loader size={12} className={styles.spin}/> Mise à jour...</>
-                                          : <><RefreshCw size={12}/> à mettre à jour</>}
+                                          ? <><Loader size={12} className={styles.spin}/> Màj...</>
+                                          : <><RefreshCw size={12}/> Màj</>}
                                       </button>
                                 )}
                                 {p._dans_excel === false && (
                                   ajoutEtat === 'done'
                                     ? <span className={styles.badgeJaune}>✓ Ajouté</span>
                                     : <button className={styles.btnAjouter}
-                                        onClick={() => ajouterDansExcel(p)}
+                                        onClick={() => setModalAjout(p)}
                                         disabled={ajoutEtat === 'loading'}>
                                         {ajoutEtat === 'loading'
                                           ? <Loader size={12} className={styles.spin}/>
                                           : <PlusCircle size={12}/>}
-                                        {ajoutEtat === 'loading' ? 'Ajout en cours...' : 'à ajouter'}
+                                        {ajoutEtat === 'loading' ? 'Ajout...' : 'Ajouter'}
                                       </button>
                                 )}
                                 {p._dans_excel === null && <span className={styles.badgeGris}>—</span>}
@@ -1470,6 +1471,113 @@ export default function Explorateur() {
             Les catégories produits du site apparaîtront dans le panneau gauche.<br/>
             Cliquez sur une catégorie pour extraire les produits et les comparer à votre fichier Excel.
           </p>
+        </div>
+      )}
+
+      {/* ── Modal confirmation Ajout ──────────────────────────── */}
+      {modalAjout && (
+        <div className={styles.overlay} onClick={() => setModalAjout(null)}>
+          <div className={styles.modal} onClick={e => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <PlusCircle size={16}/> Confirmer l'ajout dans l'Excel
+              <button className={styles.modalClose} onClick={() => setModalAjout(null)}><X size={14}/></button>
+            </div>
+            <div className={styles.modalBody}>
+              <p>Le produit suivant va être ajouté :</p>
+              <table className={styles.modalTable}>
+                <thead><tr><th>Colonne</th><th>Valeur</th></tr></thead>
+                <tbody>
+                  {(() => {
+                    const n = s => {
+                      if (!s) return ''
+                      let h = s.toUpperCase()
+                      if (/[\u00c0-\u00ff]/.test(h)) {
+                        try {
+                          const bytes = new Uint8Array(h.length)
+                          for (let j = 0; j < h.length; j++) bytes[j] = h.charCodeAt(j) & 0xFF
+                          h = new TextDecoder('utf-8').decode(bytes).toUpperCase()
+                        } catch {}
+                      }
+                      return h.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9]/g, '')
+                    }
+                    const match = (col, keywords) => {
+                      const nc = n(col)
+                      return keywords.some(k => nc.includes(n(k)) || n(k).includes(nc))
+                    }
+                    const mKey = modalAjout.reference || modalAjout.nom
+                    return colonnesExcel.filter(c => c && c.trim()).map((col, i) => {
+                      let val = '—'
+                      if (match(col, ['REFERENCE','REF','SKU','CODE']))
+                        val = modalAjout.reference || '—'
+                      else if (match(col, ['NOM','DESIGNATION','LIBELLE','DESCRIPTION','PRODUIT','ARTICLE']))
+                        val = modalAjout.nom || '—'
+                      else if (match(col, ['PRIX','TARIF','COUT','COST','AMOUNT','PRIXFACTURE']))
+                        val = modalAjout.prix || '—'
+                      else if (match(col, ['CEDI','GPDIS','FINDIS','SOGAM']))
+                        val = modalAjout.prix || '—'
+                      else if (n(col).includes('ECO') && n(col).includes('PART')) {
+                        const ecoSite = edits[`eco_${mKey}`] !== undefined && edits[`eco_${mKey}`] !== ''
+                          ? parseFloat(edits[`eco_${mKey}`])
+                          : (modalAjout.eco_part_site != null ? parseFloat(modalAjout.eco_part_site) : null)
+                        const ecoExcel = modalAjout.eco_part != null ? parseFloat(modalAjout.eco_part) : null
+                        if (ecoSite != null && ecoExcel != null) {
+                          val = <span>
+                            <span style={{color:'#22c55e', fontWeight:700}} title="Eco-part Excel">{ecoExcel.toFixed(2)} €</span>
+                            <span style={{margin:'0 3px', opacity:.4}}> / </span>
+                            <span style={{color:'#f97316', fontWeight:700}} title="Eco-part site">{ecoSite.toFixed(2)} €</span>
+                          </span>
+                        } else if (ecoSite != null) {
+                          val = <span style={{color:'#f97316', fontWeight:700}}>{ecoSite.toFixed(2)} €</span>
+                        } else if (ecoExcel != null) {
+                          val = <span style={{color:'#22c55e', fontWeight:700}}>{ecoExcel.toFixed(2)} €</span>
+                        } else {
+                          val = '—'
+                        }
+                      }
+                      else if (n(col).includes('CONC'))
+                        val = edits[`pc_${mKey}`] || modalAjout.prix_comparer || '—'
+                      else if (n(col).includes('PRIMO') || (n(col).includes('PRIX') && (n(col).includes('COMPAR') || n(col).includes('COMPARER'))))
+                        val = edits[`pc_${mKey}`] || modalAjout.prix_comparer || '—'
+                      else if (n(col) === 'MINI')
+                        val = (() => {
+                          const ecoV = edits[`eco_${mKey}`] !== undefined && edits[`eco_${mKey}`] !== ''
+                            ? parseFloat(edits[`eco_${mKey}`])
+                            : (modalAjout.eco_part_site != null ? parseFloat(modalAjout.eco_part_site)
+                              : (modalAjout.eco_part != null ? parseFloat(modalAjout.eco_part) : 0))
+                          const fraisM = detecterFrais(modalAjout.nom)
+                          const miniM = calculerMiniUnifie(modalAjout, ecoV) || Math.round((parseFloat(modalAjout.prix) + ecoV + fraisM) * 1.2 / 0.98 * 100) / 100
+                          return miniM.toFixed(2) + ' €'
+                        })()
+                      else if (n(col).includes('EAN') || n(col) === 'GENCOD')
+                        val = modalAjout.ean13 || '—'
+                      else if (n(col).includes('FAMILLE') || n(col) === 'CATEGORIE' || n(col) === 'CATEGORY')
+                        val = modalAjout.famille || '—'
+                      else if (n(col).includes('SOUSFAMILLE') || n(col).includes('SOUS-FAMILLE') || n(col).includes('SOUS_FAMILLE'))
+                        val = modalAjout.sous_famille || '—'
+                      else if (n(col).includes('MARQUE') || n(col).includes('BRAND') || n(col).includes('MANUFACTURER'))
+                        val = modalAjout.marque || '—'
+                      else if (n(col).includes('DISPO') || n(col) === 'ETAT' || n(col) === 'STOCK' || n(col) === 'STATUS')
+                        val = modalAjout.disponibilite || '—'
+                      return (
+                        <tr key={i}>
+                          <td className={styles.modalCol}>{col || `Colonne ${i+1}`}</td>
+                          <td className={styles.modalVal}>{val}</td>
+                        </tr>
+                      )
+                    })
+                  })()}
+                </tbody>
+              </table>
+            </div>
+            <div className={styles.modalFooter}>
+              <button className={styles.btnAnnuler} onClick={() => setModalAjout(null)}>Annuler</button>
+              <button className={styles.btnConfirmer} onClick={() => {
+                const p = modalAjout
+                setModalAjout(null)
+                ajouterDansExcel(p)
+              }}>Ajouter au fichier</button>
+            </div>
+          </div>
         </div>
       )}
 
