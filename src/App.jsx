@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './AuthContext'
 import Sidebar     from './components/Sidebar'
 import ProgressBar from './components/ProgressBar'
 import Excel       from './pages/Excel'
+import MultiScrape from './pages/MultiScrape'
 import Explorateur from './pages/Explorateur'
 import PDFs        from './pages/PDFs'
 import Auth        from './pages/Auth'
@@ -56,6 +57,7 @@ function AppLayout() {
           <Route path="/abonnement"  element={<Abonnement />} />
           <Route path="/admin"       element={<AdminProtect><Admin /></AdminProtect>} />
           <Route path="/excel"       element={<AcceesProtect><Excel /></AcceesProtect>} />
+          <Route path="/multi-scrape" element={<AcceesProtect><MultiScrape /></AcceesProtect>} />
           <Route path="/explorateur" element={<AcceesProtect><Explorateur /></AcceesProtect>} />
           <Route path="/pdfs"        element={<AcceesProtect><PDFs /></AcceesProtect>} />
         </Routes>

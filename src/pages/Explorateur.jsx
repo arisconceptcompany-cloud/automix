@@ -2,8 +2,8 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
 import {
   Globe, Search, Loader, ExternalLink, ChevronLeft, ChevronRight,
-  Package, RefreshCw, Lock, Eye, EyeOff, LogIn, X, PlusCircle, Copy, CheckCircle,
-  CheckSquare, Square
+  Package, RefreshCw, X, PlusCircle, Copy, CheckCircle,
+  CheckSquare, Square, Wifi, WifiOff
 } from 'lucide-react'
 import axios from 'axios'
 import { getCache, setCache, clearCache } from '../cache'
@@ -59,6 +59,9 @@ function CaptchaModal({ siteKey, onSolve, onClose, loading }) {
 
 const MARQUES_DISPONIBLES = ['ASKO', 'BEKO', 'AEG', 'BOSCH', 'SIEMENS', 'NEFF', 'SMEG', 'LG', 'SAMSUNG', 'WHIRLPOOL', 'MIELE', 'ELECTROLUX', 'CANDY', 'HAIER', 'FAGOR', 'AMICA']
 
+const SITES_AUTO = ['cedi', 'findis', 'gpdis', 'sogam']
+const SITES_AUTO_LABEL = { cedi: 'CEDI', findis: 'FINDIS', gpdis: 'GPDIS', sogam: 'SOGAM' }
+
 export default function Explorateur() {
   const [urlSaisie,    setUrlSaisie]    = useState('')
   const [siteInfo,     setSiteInfo]     = useState(null)
@@ -71,18 +74,13 @@ export default function Explorateur() {
   const [showMarques,    setShowMarques]    = useState(false)
   const [menuOuvert,    setMenuOuvert]    = useState(true)
 
-  const [loginVisible,  setLoginVisible]  = useState(false)
-  const [loginUrl,        setLoginUrl]        = useState('')
-  const [loginEmail,      setLoginEmail]      = useState('')
-  const [loginPassword,   setLoginPassword]   = useState('')
-  const [loginCodeClient, setLoginCodeClient] = useState('')
-  const [showPwd,         setShowPwd]         = useState(false)
-  const [loginLoading,  setLoginLoading]  = useState(false)
   const [loginStatus,   setLoginStatus]   = useState(null)
 
   const [cediSite,  setCediSite]  = useState(false)
   const [connecte,  setConnecte]  = useState(false)
-  const [loginForce, setLoginForce] = useState(false)
+
+  const [sitesStatut, setSitesStatut] = useState({})
+  const [siteBusy,    setSiteBusy]    = useState({})
 
   const [captchaVisible,  setCaptchaVisible]  = useState(false)
   const [captchaSiteKey,  setCaptchaSiteKey]  = useState('')
@@ -269,6 +267,43 @@ export default function Explorateur() {
     setNouvelleMarque('')
   }
 
+  const connecterSite = useCallback(async (site) => {
+    setSiteBusy(prev => ({ ...prev, [site]: true }))
+    try {
+      const res = await axios.post('/api/explorateur/connecter', { site })
+      const d = res.data
+      setSitesStatut(prev => ({
+        ...prev,
+        [site]: { label: d.label, base: d.base, connecte: !!d.connecte },
+      }))
+      if (d.captcha) {
+        setToast({ message: `⏳ ${d.label || site.toUpperCase()} demande un CAPTCHA — cliquez à nouveau ou utilisez le Scrap multi-sites`, type: 'info' })
+        setTimeout(() => setToast(null), 6000)
+        return null
+      }
+      if (d.connecte) setLoginStatus('ok')
+      return d
+    } catch (e) {
+      setErreur(e.response?.data?.erreur || 'Connexion automatique échouée')
+      return null
+    } finally {
+      setSiteBusy(prev => ({ ...prev, [site]: false }))
+    }
+  }, [])
+
+  useEffect(() => {
+    let actif = true
+    axios.get('/api/explorateur/sites').then(r => {
+      if (!actif) return
+      const st = r.data.sites || {}
+      setSitesStatut(st)
+      if (Object.values(st).some(s => s.connecte)) setLoginStatus('ok')
+    }).catch(() => {}).finally(() => {
+      actif = false
+    })
+    return () => { actif = false }
+  }, [])
+
   const explorer = async (urlForce, forceReload = false) => {
     const url = (urlForce || urlSaisie).trim()
     if (!url.startsWith('http')) { setErreur('URL invalide — commencez par http'); return }
@@ -285,15 +320,9 @@ export default function Explorateur() {
         setConnecte(cached.connecte || false)
         setLoadingLiens(false)
         if (cached.cedi_site && !cached.connecte) {
-          setLoginVisible(true)
-          setLoginForce(true)
-          setToast({ message: '🔐 Connectez-vous à votre compte CEDI (email + N° client + mot de passe) pour accéder aux produits', type: 'info' })
-        } else {
-          setLoginForce(false)
-          const aLogin = (cached.liens || []).some(l =>
-            /login|connexion|compte|account|signin/i.test(l.href)
-          )
-          if (aLogin && !loginStatus) setLoginVisible(true)
+          setToast({ message: '🔐 Connexion automatique au compte CEDI…', type: 'info' })
+          const cd = await connecterSite('cedi')
+          if (cd && cd.connecte) { setLoginStatus('ok'); explorer(url, true) }
         }
         return
       }
@@ -314,40 +343,13 @@ export default function Explorateur() {
       ajouterHistorique(url, d.site?.titre || url)
 
       if (isCedi && !isConnected) {
-        setLoginVisible(true)
-        setLoginForce(true)
-        setToast({ message: '🔐 Connectez-vous à votre compte CEDI (email + N° client + mot de passe) pour accéder aux produits', type: 'info' })
-      } else {
-        setLoginForce(false)
-        const aLogin = (d.liens || []).some(l =>
-          /login|connexion|compte|account|signin/i.test(l.href)
-        )
-        if (aLogin && !loginStatus) setLoginVisible(true)
+        setToast({ message: '🔐 Connexion automatique au compte CEDI…', type: 'info' })
+        const cd = await connecterSite('cedi')
+        if (cd && cd.connecte) { setLoginStatus('ok'); explorer(url, true) }
       }
     } catch (e) {
       setErreur(e.response?.data?.erreur || 'Impossible de charger le site')
     } finally { setLoadingLiens(false) }
-  }
-
-  const seConnecter = async () => {
-    if (!loginEmail || !loginPassword) { setErreur('Identifiant et mot de passe requis'); return }
-    setLoginLoading(true); setErreur(null)
-    try {
-      const res = await axios.post('/api/explorateur/login', {
-        url_base: urlSaisie.trim(), login_url: loginUrl.trim() || null,
-        email: loginEmail, password: loginPassword,
-        code_client: loginCodeClient.trim() || null,
-      })
-      if (res.data.succes) {
-        setLoginStatus('ok'); setConnecte(true); setLoginForce(false)
-        setLoginVisible(false); setErreur(null)
-        explorer(urlSaisie, true)
-      } else {
-        setLoginStatus('err'); setErreur(res.data.message || 'Connexion échouée')
-      }
-    } catch (e) {
-      setLoginStatus('err'); setErreur(e.response?.data?.erreur || 'Erreur de connexion')
-    } finally { setLoginLoading(false) }
   }
 
   const urlRef = useRef(urlSaisie)
@@ -355,9 +357,10 @@ export default function Explorateur() {
 
   const consulter = useCallback(async (lien, marques, siteUrl) => {
     if (cediSite && !connecte) {
-      setLoginVisible(true)
-      setToast({ message: '🔐 Connectez-vous d\'abord à votre compte CEDI', type: 'info' })
-      return
+      setToast({ message: '🔐 Connexion automatique au compte CEDI…', type: 'info' })
+      const cd = await connecterSite('cedi')
+      if (!cd || !cd.connecte) return
+      setLoginStatus('ok')
     }
     const site = siteUrl || urlRef.current
     const marquesFinal = marques || marquesActives
@@ -391,10 +394,14 @@ export default function Explorateur() {
       })
       if (res.data.login_required) {
         setConnecte(false)
-        setLoginVisible(true)
-        setErreur(res.data.message || 'Connexion CEDI requise')
-        if (!hasCached) setProduits([])
-        return
+        setToast({ message: '🔐 Connexion automatique au compte CEDI…', type: 'info' })
+        const cd = await connecterSite('cedi')
+        if (!cd || !cd.connecte) {
+          setErreur(res.data.message || 'Connexion CEDI requise')
+          if (!hasCached) setProduits([])
+          return
+        }
+        setLoginStatus('ok')
       }
       if (res.data.captcha_required) {
         setCaptchaSiteKey(res.data.site_key)
@@ -434,7 +441,7 @@ export default function Explorateur() {
       setChronoElapsed(elapsed)
       setLoadingProd(false)
     }
-  }, [cacheKeyProducts, siteInfo, marquesActives, cediSite, connecte, urlRef])
+  }, [cacheKeyProducts, siteInfo, marquesActives, cediSite, connecte, urlRef, connecterSite])
 
   const soumettreCaptcha = useCallback(async (token) => {
     if (!token) return
@@ -916,12 +923,32 @@ export default function Explorateur() {
           <button className={styles.btnPrimary} onClick={() => explorer()} disabled={loadingLiens}>
             {loadingLiens ? <><Loader size={14} className={styles.spin}/> Chargement...</> : <><Search size={14}/> Analyser</>}
           </button>
-          {siteInfo && (
-            <button className={styles.btnLogin + (loginStatus === 'ok' ? ' ' + styles.btnLoginOk : '')}
-              onClick={() => setLoginVisible(v => !v)}>
-              <Lock size={14}/> {loginStatus === 'ok' ? 'Connecté' : 'Connexion'}
-            </button>
-          )}
+          <div className={styles.sitesBar} title="Connexion automatique des sites (identifiants déjà enregistrés)">
+            {SITES_AUTO.map(site => {
+              const st = sitesStatut[site]
+              const enLigne = !!st?.connecte
+              return (
+                <button key={site}
+                  className={enLigne ? styles.siteBtnOk : styles.siteBtn}
+                  onClick={() => {
+                    const base = (st && st.base) || urlSaisie
+                    connecterSite(site).then(d => {
+                      const cible = d && (d.base || base)
+                      if (cible) { setUrlSaisie(cible); explorer(cible, true) }
+                    })
+                  }}
+                  disabled={siteBusy[site]}
+                  title={enLigne ? `${SITES_AUTO_LABEL[site]} connecté — prêt à l'emploi` : `Connexion automatique à ${SITES_AUTO_LABEL[site]}`}>
+                  {siteBusy[site]
+                    ? <Loader size={12} className={styles.spin}/>
+                    : enLigne
+                      ? <Wifi size={12}/>
+                      : <WifiOff size={12}/>}
+                  {SITES_AUTO_LABEL[site]}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         {siteInfo && (
@@ -935,41 +962,6 @@ export default function Explorateur() {
         {erreur && (
           <div className={styles.erreur}>{erreur}
             <button onClick={() => setErreur(null)}><X size={13}/></button>
-          </div>
-        )}
-
-        {loginVisible && (
-          <div className={`${styles.loginPanel} ${cediSite && !connecte ? styles.loginPanelCedi : ''}`}>
-            <div className={styles.loginPanelHeader}>
-              <Lock size={15}/>
-              {cediSite && !connecte ? '🔐 Connexion CEDI requise' : 'Connexion au site'}
-              {!loginForce && (
-                <button className={styles.loginClose} onClick={() => setLoginVisible(false)}><X size={14}/></button>
-              )}
-            </div>
-            {cediSite && !connecte && (
-              <div className={styles.loginCediMessage}>
-                Vous devez être connecté à votre compte CEDI pour accéder aux produits.
-              </div>
-            )}
-            <div className={styles.loginFields}>
-              <input type="url" value={loginUrl} onChange={e => setLoginUrl(e.target.value)}
-                placeholder="URL de connexion (optionnel)" />
-              <input type="text" value={loginEmail} onChange={e => setLoginEmail(e.target.value)}
-                placeholder="Email / identifiant *" />
-              <input type="text" value={loginCodeClient} onChange={e => setLoginCodeClient(e.target.value)}
-                placeholder="N° compte client (si requis)" />
-              <div className={styles.pwdWrap}>
-                <input type={showPwd ? 'text' : 'password'} value={loginPassword}
-                  onChange={e => setLoginPassword(e.target.value)} placeholder="Mot de passe *" />
-                <button type="button" onClick={() => setShowPwd(v => !v)}>
-                  {showPwd ? <EyeOff size={14}/> : <Eye size={14}/>}
-                </button>
-              </div>
-              <button className={styles.btnConnexion} onClick={seConnecter} disabled={loginLoading}>
-                {loginLoading ? <><Loader size={14} className={styles.spin}/> Connexion...</> : <><LogIn size={14}/> Se connecter</>}
-              </button>
-            </div>
           </div>
         )}
 
@@ -1061,7 +1053,7 @@ export default function Explorateur() {
                       return (
                       <div key={i}
                         className={`${styles.menuItem}${lienActif?.href === l.href ? ' ' + styles.menuActif : ''}${estVerifie ? ' ' + styles.menuVerifie : ''}${cediSite && !connecte ? ' ' + styles.menuLocked : ''}`}
-                        onClick={() => cediSite && !connecte ? (setLoginVisible(true), setToast({ message: '🔐 Connectez-vous d\'abord à CEDI', type: 'info' })) : consulter(l)}
+                        onClick={() => cediSite && !connecte ? (setToast({ message: '🔐 Connexion automatique au compte CEDI…', type: 'info' }), connecterSite('cedi').then(cd => cd && cd.connecte && consulter(l))) : consulter(l)}
                         title={(cediSite && !connecte ? '🔒 Connectez-vous d\'abord - ' : '') + (l.texte || l.href.split('/').filter(Boolean).pop()) + '\n' + l.href}>
                         <span onClick={e => toggleVerifie(l.href, e)} style={{display:'flex',cursor:'pointer',flexShrink:0}}>
                           {estVerifie ? <CheckSquare size={13} color="#22c55e"/> : <Square size={13} color="var(--text2)"/>}
@@ -1161,12 +1153,11 @@ export default function Explorateur() {
                         <col className={styles.colEco}/>
                         <col className={styles.colMini}/>
                         <col className={styles.colFrais}/>
-                        <col className={styles.colComparer}/>
                         <col className={styles.colPdf}/>
                         <col className={styles.colStatut}/>
                       </colgroup>
                       <thead>
-                        <tr><th>#</th><th>Photo</th><th>Réf.</th><th>EAN13</th><th>Famille</th><th>Sous-famille</th><th>Nom</th><th>Disponibilité</th><th>Prix Excel</th><th>Prix Site</th><th>Eco Part</th><th>Mini</th><th>Frais</th><th>Conc 1</th><th>PDF</th><th>Statut</th></tr>
+                        <tr><th>#</th><th>Photo</th><th>Réf.</th><th>EAN13</th><th>Famille</th><th>Sous-famille</th><th>Nom</th><th>Disponibilité</th><th>Prix Excel</th><th>Prix Site</th><th>Eco Part</th><th>Mini</th><th>Frais</th><th>PDF</th><th>Statut</th></tr>
                       </thead>
                       <tbody>
                         {produitsFiltres.map((p, i) => {
@@ -1394,31 +1385,8 @@ export default function Explorateur() {
                                    style={{width:56}}
                                  />
                                </td>
-                               <td className={styles.comparer}>
-                                  {p.prix_comparer != null ? (
-                                    <span className={styles.comparerVal}>
-                                      {(() => {
-                                        const raw = String(p.prix_comparer)
-                                        const cleaned = raw.replace(/\s*\([^)]*\)\s*$/, '').trim()
-                                        return cleaned || raw
-                                      })()}
-                                    </span>
-                                ) : (
-                                  <div style={{display:'flex', gap:4, alignItems:'center'}}>
-                                    <span className={styles.badgeGris}>—</span>
-                                    <input type="text"
-                                      value={edits[`pc_${key}`] ?? ''}
-                                      onChange={e => setEdits(prev => ({...prev, [`pc_${key}`]: e.target.value}))}
-                                      placeholder="Entrer manuelle"
-                                      className={styles.editInput}
-                                      onClick={e => e.stopPropagation()}
-                                      style={{maxWidth:140}}
-                                    />
-                                  </div>
-                                )}
-                              </td>
-                              <td>
-                                {p.reference && p.reference !== '—' ? (
+                               <td>
+                                 {p.reference && p.reference !== '—' ? (
                                   <div className={styles.pdfCell}>
                                     {!pdfResultats[p.reference] ? (
                                       <button

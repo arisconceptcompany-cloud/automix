@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Shield, FileSpreadsheet, Compass, LogIn, LogOut, User, CreditCard, Zap, Clock, Globe, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { Shield, FileSpreadsheet, Compass, LogIn, LogOut, User, CreditCard, Zap, Clock, Globe, X, ChevronDown, ChevronUp, Search } from 'lucide-react'
 import { useAuth } from '../AuthContext'
 import axios from 'axios'
 import styles from './Sidebar.module.css'
 
 const nav = [
   { to: '/excel',       icon: FileSpreadsheet, label: 'Fichier Excel' },
-  { to: '/explorateur', icon: Compass,         label: 'Analyseur'   },
+  { to: '/multi-scrape', icon: Search,         label: 'Recherche par Reference'   },
+  { to: '/explorateur', icon: Compass,         label: 'Recherche par Categorie'   },
 ]
 
 export default function Sidebar({ onToggle }) {

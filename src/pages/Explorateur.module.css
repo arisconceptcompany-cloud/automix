@@ -33,6 +33,17 @@
 }
 .btnLogin:hover { border-color: var(--accent); color: var(--accent2); }
 .btnLoginOk { background: #14532d33; border-color: var(--success); color: var(--success); }
+
+.sitesBar { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.siteBtn, .siteBtnOk {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 10px; border-radius: 8px; font-size: 12px; font-weight: 600;
+  cursor: pointer; white-space: nowrap; transition: all .15s; border: 1px solid var(--border);
+}
+.siteBtn { background: var(--bg2); color: var(--text2); }
+.siteBtn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent2); }
+.siteBtnOk { background: #14532d33; border-color: var(--success); color: var(--success); }
+.siteBtn:disabled, .siteBtnOk:disabled { opacity: .5; cursor: not-allowed; }
 .btnDownload {
   display: flex; align-items: center; gap: 5px;
   padding: 8px 12px; background: var(--bg2); color: var(--text2);
