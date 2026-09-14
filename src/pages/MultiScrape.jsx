@@ -11,6 +11,7 @@ import styles from './MultiScrape.module.css'
 const SITES = ['cedi', 'findis', 'gpdis', 'sogam']
 const SITE_LABEL = { cedi: 'CEDI', findis: 'FINDIS', gpdis: 'GPDIS', sogam: 'SOGAM' }
 const SITE_EXCEL_KEY = { cedi: 'cedi', findis: 'find', gpdis: 'gpdis', sogam: 'sogam' }
+const SESSION_KEY = 'multiscrape_session_v1'
 
 const num = (v) => {
   const n = parseFloat(v)
@@ -67,6 +68,10 @@ export default function MultiScrape() {
   const [elapsed, setElapsed] = useState(0)
   const startedAt = useRef(null)
 
+  const [masquerTraitees, setMasquerTraitees] = useState(true)
+  const [sessionExiste, setSessionExiste] = useState(false)
+  const restoredSelRef = useRef(null)
+
   const manuel = (ref, field) => (manuels[ref] || {})[field] || ''
   const setManuel = (ref, field, v) =>
     setManuels(m => ({ ...m, [ref]: { ...(m[ref] || {}), [field]: v } }))
@@ -98,11 +103,20 @@ export default function MultiScrape() {
     return out
   }, [produits])
 
+  const refsDoneSet = useMemo(() => new Set(doneRefs), [doneRefs])
+
+  const refsVisibles = useMemo(() => {
+    if (!masquerTraitees) return refsDispo
+    return refsDispo.filter(r => !refsDoneSet.has(r.ref))
+  }, [refsDispo, masquerTraitees, refsDoneSet])
+
+  const nbMasquees = refsDispo.length - refsVisibles.length
+
   const refsFiltres = useMemo(() => {
     const f = norm(filtre)
-    if (!f) return refsDispo
-    return refsDispo.filter(r => norm(r.ref).includes(f) || norm(r.nom).includes(f))
-  }, [refsDispo, filtre])
+    if (!f) return refsVisibles
+    return refsVisibles.filter(r => norm(r.ref).includes(f) || norm(r.nom).includes(f))
+  }, [refsVisibles, filtre])
 
   const references = [...refsSel]
 
@@ -120,13 +134,72 @@ export default function MultiScrape() {
         seen.add(k)
         all.push(String(ref))
       }
-      setRefsSel(all)
+      setRefsSel(restoredSelRef.current ? (() => { const s = restoredSelRef.current; restoredSelRef.current = null; return s })() : all)
     }).catch(() => {})
   }, [])
 
   useEffect(() => {
     chargerProduits()
   }, [chargerProduits])
+
+  // ── Persistance de session (résultats conservés au changement de menu) ──
+  const enregistrerSession = useCallback(() => {
+    if (!jobId) return
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify({
+        jobId, status, fait, total, current, elapsed, jobMsg,
+        refsSel, sitesActifs, filtre, manuels, savedAt: Date.now(),
+      }))
+    } catch { /* stockage local indisponible */ }
+  }, [jobId, status, fait, total, current, elapsed, jobMsg, refsSel, sitesActifs, filtre, manuels])
+
+  useEffect(() => { enregistrerSession() }, [enregistrerSession])
+
+  useEffect(() => {
+    let saved = null
+    try { saved = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null') }
+    catch { /* lecture locale non bloquante */ }
+    if (!saved || !saved.jobId) return
+
+    if (Array.isArray(saved.refsSel)) restoredSelRef.current = saved.refsSel
+
+    axios.get(`/api/multi-scraper/statut/${saved.jobId}`)
+      .then(r => {
+        const d = r.data
+        if (saved.filtre) setFiltre(saved.filtre)
+        if (saved.manuels) setManuels(saved.manuels)
+        if (saved.sitesActifs) setSitesActifs(saved.sitesActifs)
+        if (d.duree != null) setElapsed(d.duree)
+        setSessionExiste(true)
+        setJobId(saved.jobId)
+        setStatus(d.status || 'idle')
+        setFait(d.fait ?? 0)
+        setTotal(d.total ?? 0)
+        setCurrent(d.current)
+        setResults(d.results || {})
+        setConc1Map(d.conc1 || {})
+        setDispoMap(d.dispo || {})
+        const nd = d.done_refs || []
+        setDoneRefs(nd)
+        if (nd.length) {
+          const ndSet = new Set(nd)
+          setRefsSel(prev => {
+            const n = prev.filter(x => !ndSet.has(x))
+            return n.length === prev.length ? prev : n
+          })
+        }
+        setRefsInfo(d.refs || {})
+        if (d.message) setJobMsg(d.message)
+        if ((d.status === 'running') && d.duree != null) {
+          startedAt.current = Date.now() - d.duree * 1000
+        }
+      })
+      .catch(() => {
+        try { localStorage.removeItem(SESSION_KEY) }
+        catch { /* stockage local indisponible */ }
+        setSessionExiste(false)
+      })
+  }, [])
 
   useEffect(() => {
     if (!jobId || status !== 'running') return
@@ -141,7 +214,15 @@ export default function MultiScrape() {
         setResults(d.results || {})
         setConc1Map(d.conc1 || {})
         setDispoMap(d.dispo || {})
-        setDoneRefs(d.done_refs || [])
+        const nd = d.done_refs || []
+        setDoneRefs(nd)
+        if (nd.length) {
+          const ndSet = new Set(nd)
+          setRefsSel(prev => {
+            const n = prev.filter(r => !ndSet.has(r))
+            return n.length === prev.length ? prev : n
+          })
+        }
         setRefsInfo(d.refs || {})
         if (d.status === 'done' || d.status === 'error' || d.status === 'stopped') {
           setStatus(d.status)
@@ -202,13 +283,19 @@ export default function MultiScrape() {
     setJobId(null); setStatus('idle'); setFait(0); setTotal(0)
     setCurrent(null); setResults({}); setRefsInfo({}); setJobMsg('')
     setConc1Map({}); setDispoMap({}); setDoneRefs([]); setElapsed(0)
+    setSessionExiste(false)
+    try { localStorage.removeItem(SESSION_KEY) } catch { /* stockage local indisponible */ }
+  }
+
+  const effacerSession = () => {
+    reinitialiser()
   }
 
   const toggleRef = (ref) => {
     setRefsSel(prev => prev.includes(ref) ? prev.filter(x => x !== ref) : [...prev, ref])
   }
 
-  const toutSelectionner = () => setRefsSel(refsDispo.map(r => r.ref))
+  const toutSelectionner = () => setRefsSel(refsVisibles.map(r => r.ref))
   const toutDeselectionner = () => setRefsSel([])
   const selectionnerFiltre = () => {
     setRefsSel(prev => {
@@ -421,7 +508,20 @@ export default function MultiScrape() {
       <div className={styles.panel}>
         <div className={styles.refsHeader}>
           <label className={styles.label}>Références (auto-chargées depuis le fichier Excel)</label>
-          <span className={styles.refsCount}>{references.length} / {refsDispo.length} sélectionnée(s)</span>
+          <div className={styles.refsHeaderRight}>
+            <label className={styles.masquerLabel} title="Masquer les références dont le scan est terminé (traitement effectué)">
+              <input
+                type="checkbox"
+                checked={masquerTraitees}
+                onChange={e => setMasquerTraitees(e.target.checked)}
+              />
+              Masquer les traitées
+            </label>
+            {nbMasquees > 0 && <span className={styles.masqueBadge}>{nbMasquees} masquée(s)</span>}
+            <span className={styles.refsCount} title={`${references.length} / ${refsDispo.length} références disponibles`}>
+              {references.length} / {refsVisibles.length} sélectionnée(s)
+            </span>
+          </div>
         </div>
         <div className={styles.filtreRow}>
           <Search size={14} className={styles.filtreIcon} />
@@ -434,7 +534,11 @@ export default function MultiScrape() {
         </div>
         <div className={styles.listeRefs}>
           {refsFiltres.length === 0 ? (
-            <div className={styles.emptyListe}>Aucune référence dans le filtre</div>
+            <div className={styles.emptyListe}>
+              {masquerTraitees && nbMasquees === refsDispo.length
+                ? 'Toutes les références sont marquées comme traitées'
+                : 'Aucune référence dans le filtre'}
+            </div>
           ) : (
             refsFiltres.map(r => (
               <label key={r.ref} className={styles.refRow}>
@@ -495,6 +599,12 @@ export default function MultiScrape() {
           {status === 'running' && (
             <button className={styles.stopBtn} onClick={arreter} disabled={busy}>
               <Square size={14} /> Arrêter
+            </button>
+          )}
+          {sessionExiste && (
+            <button className={styles.iconBtn} onClick={effacerSession} disabled={busy}
+              title="Supprime le résultat affiché et la session enregistrée — tout repart à zéro">
+              <Trash2 size={13} /> Supprimer le résultat
             </button>
           )}
         </div>

@@ -3,12 +3,15 @@ import { useLocation } from 'react-router-dom'
 import {
   Globe, Search, Loader, ExternalLink, ChevronLeft, ChevronRight,
   Package, RefreshCw, X, PlusCircle, Copy, CheckCircle,
-  CheckSquare, Square, Wifi, WifiOff
+  CheckSquare, Square, Wifi, WifiOff, Trash2
 } from 'lucide-react'
 import axios from 'axios'
-import { getCache, setCache, clearCache } from '../cache'
+import { getCache, setCache, clearCache, invalidatePrefix } from '../cache'
 import ProgressBar from '../components/ProgressBar'
 import styles from './Explorateur.module.css'
+
+const SNAPSHOT_PREFIX = 'explo_site_v1_'
+const normaliserUrl = (u) => (u || '').trim().replace(/\/+$/, '')
 
 function CaptchaModal({ siteKey, onSolve, onClose, loading }) {
   const containerRef = useRef(null)
@@ -148,8 +151,6 @@ export default function Explorateur() {
     if (fromMemory?.produits?.length > 0) {
       setProduits(fromMemory.produits)
       setLoadingProd(false)
-      setToast({ message: '📋 Résultats chargés depuis la mémoire', type: 'info' })
-      setTimeout(() => setToast(null), 3000)
       return
     }
 
@@ -162,8 +163,6 @@ export default function Explorateur() {
           if (produitsSaved && produitsSaved.length > 0) {
             setProduits(produitsSaved)
             setLoadingProd(false)
-            setToast({ message: '📋 Résultats restaurés depuis la mémoire persistante', type: 'info' })
-            setTimeout(() => setToast(null), 3000)
           }
         } catch (e) {}
       }
@@ -183,9 +182,6 @@ export default function Explorateur() {
 
     const key = `explo_produits_local_${siteInfo.url}`
     localStorage.setItem(key, JSON.stringify(nouveauxProduits))
-
-    setToast({ message: '💾 Résultats sauvegardés en mémoire', type: 'success' })
-    setTimeout(() => setToast(null), 2000)
   }, [cacheKeyProducts, siteInfo, marquesActives])
 
   useEffect(() => {
@@ -207,6 +203,31 @@ export default function Explorateur() {
       sauvegarderDansCache(produits)
     }
   }, [produits, siteInfo?.url, cacheKeyProducts, sauvegarderDansCache])
+
+  // ── Snapshot complet par site (liens + catégorie active + produits) ──
+  const lireSnapshot = useCallback((url) => {
+    if (!url) return null
+    try {
+      const raw = localStorage.getItem(SNAPSHOT_PREFIX + url)
+      return raw ? JSON.parse(raw) : null
+    } catch { /* snapshot illisible */ return null }
+  }, [])
+
+  const sauvegarderSnapshot = useCallback(() => {
+    if (!siteInfo?.url || !lienActif) return
+    try {
+      const prev = lireSnapshot(siteInfo.url) || {}
+      const produitsSnap = produits.length > 0 ? produits : (prev.produits || [])
+      localStorage.setItem(SNAPSHOT_PREFIX + siteInfo.url, JSON.stringify({
+        siteInfo, liens, lienActif, produits: produitsSnap, cediSite, connecte,
+        marques: marquesActives, ts: Date.now(),
+      }))
+    } catch { /* snapshot trop volumineux, ignoré */ }
+  }, [siteInfo, lienActif, liens, produits, cediSite, connecte, marquesActives, lireSnapshot])
+
+  useEffect(() => {
+    sauvegarderSnapshot()
+  }, [sauvegarderSnapshot])
 
   // ── Modal d'ajout ─────────────────────────────────────────────
   const toggleVerifie = (href, e) => {
@@ -305,9 +326,10 @@ export default function Explorateur() {
   }, [])
 
   const explorer = async (urlForce, forceReload = false) => {
-    const url = (urlForce || urlSaisie).trim()
+    const url = normaliserUrl(urlForce || urlSaisie)
     if (!url.startsWith('http')) { setErreur('URL invalide — commencez par http'); return }
     setErreur(null); setLoadingLiens(true)
+    setUrlSaisie(url)
     setLiens([]); setSiteInfo(null); setLienActif(null); setProduits([])
 
     const cacheKey = 'explo_liens_' + url
@@ -315,10 +337,15 @@ export default function Explorateur() {
       const cached = getCache(cacheKey, 1800000)
       if (cached) {
         setLiens(cached.liens || [])
-        setSiteInfo(cached.site || {})
+        setSiteInfo({ ...(cached.site || {}), url })
         setCediSite(cached.cedi_site || false)
         setConnecte(cached.connecte || false)
         setLoadingLiens(false)
+        const snap = lireSnapshot(url)
+        if (snap) {
+          if (snap.lienActif) setLienActif(snap.lienActif)
+          if (snap.produits) { setProduits(snap.produits); setLoadingProd(false) }
+        }
         if (cached.cedi_site && !cached.connecte) {
           setToast({ message: '🔐 Connexion automatique au compte CEDI…', type: 'info' })
           const cd = await connecterSite('cedi')
@@ -333,7 +360,15 @@ export default function Explorateur() {
       const d = res.data
       setCache(cacheKey, d)
       setLiens(d.liens || [])
-      setSiteInfo(d.site || {})
+      setSiteInfo({ ...(d.site || {}), url })
+
+      if (!forceReload) {
+        const snap = lireSnapshot(url)
+        if (snap) {
+          if (snap.lienActif) setLienActif(snap.lienActif)
+          if (snap.produits) { setProduits(snap.produits); setLoadingProd(false) }
+        }
+      }
 
       const isCedi = d.cedi_site || false
       const isConnected = d.connecte || false
@@ -813,10 +848,14 @@ export default function Explorateur() {
     }
   }, [location.state])
 
-  // ── Restaurer l'état après rafraîchissement ─────────────────
-  const CACHE_VERSION = 2
+  // ── Restaurer l'état après rafraîchissement / changement de menu ──
+  const CACHE_VERSION = 4
   useEffect(() => {
     try {
+      // Nettoyer les anciennes clés enregistrées avec siteInfo.url indéfini
+      ;['explo_produits_local_undefined', 'explo_site_v1_undefined'].forEach(k => {
+        try { localStorage.removeItem(k) } catch { /* ignore */ }
+      })
       const saved = JSON.parse(localStorage.getItem('explorateur_state') || '{}')
       if (saved._v !== CACHE_VERSION) {
         localStorage.removeItem('explorateur_state')
@@ -825,7 +864,23 @@ export default function Explorateur() {
       if (saved.url) setUrlSaisie(saved.url)
       if (saved.marques) setMarquesActives(saved.marques)
       if (saved.marquesDispos) setMarquesDispos(saved.marquesDispos)
-    } catch {}
+      if (saved.filtreLien) setFiltreLien(saved.filtreLien)
+      if (saved.edits) setEdits(saved.edits)
+
+      // Restauration atomique du dernier site visité (produits inclus, sans re-scrape)
+      const snap = saved.url ? lireSnapshot(normaliserUrl(saved.url)) : null
+      if (snap) {
+        if (snap.siteInfo) setSiteInfo({ ...snap.siteInfo, url: normaliserUrl(saved.url) })
+        if (snap.liens) setLiens(snap.liens)
+        if (snap.lienActif) setLienActif(snap.lienActif)
+        if (snap.produits) setProduits(snap.produits)
+        setCediSite(!!snap.cediSite)
+        setConnecte(!!snap.connecte)
+        if (snap.marques) setMarquesActives(snap.marques)
+        setLoadingProd(false)
+      }
+    } catch { /* état local non accessible */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const premierRendu = useRef(true)
@@ -834,11 +889,29 @@ export default function Explorateur() {
     try {
       localStorage.setItem('explorateur_state', JSON.stringify({
         _v: CACHE_VERSION,
-        url: urlSaisie, marques: marquesActives, marquesDispos, lienActif, siteInfo,
+        url: normaliserUrl(urlSaisie), marques: marquesActives, marquesDispos, lienActif, siteInfo,
+        cediSite, connecte, filtreLien, edits,
         liens: urlSaisie ? liens : [],
       }))
-    } catch {}
-  }, [urlSaisie, marquesActives, lienActif, siteInfo, liens])
+    } catch { /* état local non accessible */ }
+  }, [urlSaisie, marquesActives, marquesDispos, lienActif, siteInfo, liens, cediSite, connecte, filtreLien, edits])
+
+  const effacerResultat = () => {
+    const url = siteInfo?.url || normaliserUrl(urlSaisie)
+    if (url) {
+      try {
+        localStorage.removeItem(SNAPSHOT_PREFIX + url)
+        localStorage.removeItem('explo_produits_local_' + url)
+        invalidatePrefix('explo_liens_' + url)
+      } catch { /* stockage local indisponible */ }
+    }
+    try { localStorage.removeItem('explorateur_state') } catch { /* ignore */ }
+    setUrlSaisie(''); setMarquesActives([]); setMarquesDispos([])
+    setLiens([]); setSiteInfo(null); setLienActif(null); setProduits([])
+    setFiltreLien(''); setEdits({}); setLoadingProd(false); setLoadingLiens(false)
+    setToast({ message: '🗑 Résultat supprimé', type: 'success' })
+    setTimeout(() => setToast(null), 2500)
+  }
 
   const detecterFrais = (nom) => {
     const n = (nom || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -1096,6 +1169,12 @@ export default function Explorateur() {
                           <span className={styles.chronoDone}>{formatChrono(chronoElapsed)}</span>
                         )}
                       </div>
+                    )}
+                    {produits.length > 0 && (
+                      <button className={styles.btnEffacer} onClick={effacerResultat}
+                        title="Supprime le résultat affiché et les données sauvegardées pour ce site">
+                        <Trash2 size={13}/> Supprimer ce résultat
+                      </button>
                     )}
                   </div>
                   <a href={lienActif.href} target="_blank" rel="noreferrer" className={styles.contenuUrl}>

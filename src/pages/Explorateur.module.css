@@ -56,6 +56,8 @@
 .siteTitre { font-weight: 600; }
 .siteBadge { background: var(--accent); color: #fff; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; }
 .connectedBadge { background: #14532d33; color: var(--success); padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.btnEffacer { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; background: none; border: 1px solid var(--danger, #dc2626); color: var(--danger, #f87171); padding: 4px 10px; border-radius: 8px; font-size: 12px; cursor: pointer; }
+.btnEffacer:hover { background: var(--danger, #dc2626); color: #fff; }
 
 .erreur {
   display: flex; justify-content: space-between; align-items: center;
