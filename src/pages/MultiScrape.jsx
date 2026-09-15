@@ -42,6 +42,15 @@ const val = (o, keys) => {
   return undefined
 }
 
+const setCle = (o, key, value) => {
+  const out = { ...o }
+  for (const k of Object.keys(out)) {
+    if (norm(k) === norm(key)) delete out[k]
+  }
+  out[key] = value
+  return out
+}
+
 export default function MultiScrape() {
   const [produits, setProduits] = useState([])
   const [refsSel, setRefsSel] = useState([])
@@ -331,9 +340,37 @@ export default function MultiScrape() {
     const m = manuels[ref] || {}
     return ['ean13', 'famille', 'sous_famille', 'nom'].some(k => String(m[k] || '').trim() !== '')
   }
-  const aAppliquer = (ref) => trouverPrix(ref) || manuelsHorsConc(ref)
   const sansPrixSite = (ref) => !trouverPrix(ref)
   const aSupprimer = (ref) => sansPrixSite(ref) && !!refsInfo[ref]?.dans_excel
+
+  const ALT_EXCEL = { cedi: ['cedi'], findis: ['find', 'findis'], gpdis: ['gpdis'], sogam: ['sogam'] }
+
+  const estAJour = (ref) => {
+    const res = results[ref] || {}
+    if (refsInfo[ref] && !refsInfo[ref].dans_excel) return false
+    const p = refsExcelMap.get(norm(ref))
+    if (!p) return false
+    for (const site of SITES) {
+      const ev = num(val(p, ALT_EXCEL[site]))
+      const r = res[site]
+      const sv = r && !r.introuvable && r.prix != null ? parseFloat(r.prix) : null
+      if (sv == null) continue
+      if (ev == null) return false
+      if (Math.abs(ev - sv) > 0.001) return false
+    }
+    const ecoS = ecoPart(ref)
+    if (ecoS != null) {
+      const ecoE = num(val(p, ['eco_part']))
+      if (ecoE == null || Math.abs(ecoS - ecoE) > 0.001) return false
+    }
+    return true
+  }
+
+  const aActionner = (ref) => {
+    if (refsInfo[ref] && !refsInfo[ref].dans_excel) return trouverPrix(ref) || aManuels(ref)
+    if (aSupprimer(ref)) return false
+    return !estAJour(ref) || aManuels(ref)
+  }
 
   const appliquer = async (ref, silencieux = false) => {
     const sites = payloadSites(ref)
@@ -356,11 +393,28 @@ export default function MultiScrape() {
       const fraisVal = (m.frais || '').trim()
       const fraisNum = fraisVal !== '' && !isNaN(parseFloat(fraisVal)) ? parseFloat(fraisVal) : null
       if (fraisNum != null) base.frais = fraisNum
+      base.eco_part = ecoPart(ref)
       let r
       if (refsInfo[ref]?.dans_excel) {
         r = await axios.post('/api/multi-scraper/mettre-a-jour', base)
       } else {
-        r = await axios.post('/api/multi-scraper/ajouter', { ...base, eco_part: ecoPart(ref) })
+        r = await axios.post('/api/multi-scraper/ajouter', base)
+      }
+      const dataMaj = r.data || {}
+      if (refsInfo[ref]?.dans_excel && dataMaj.mis_a_jour > 0) {
+        setProduits(prev => prev.map(p => {
+          const refKey = val(p, ['reference', 'ref', 'sku', 'article'])
+          if (norm(refKey) !== norm(ref)) return p
+          const maj = dataMaj.updated || {}
+          let upd = { ...p }
+          for (const site of SITES) {
+            const nv = num(maj[site])
+            if (nv != null) upd = setCle(upd, SITE_EXCEL_KEY[site], nv)
+          }
+          const np = num(dataMaj.eco_part)
+          if (np != null) upd = setCle(upd, 'eco_part', np)
+          return upd
+        }))
       }
       if (!silencieux) setMsg({ type: 'ok', texte: r.data.message })
       return r.data
@@ -386,7 +440,7 @@ export default function MultiScrape() {
         }
         continue
       }
-      if (!aAppliquer(ref)) continue
+      if (!aActionner(ref)) continue
       try {
         const d = await appliquer(ref, true)
         if (d) {
@@ -637,7 +691,7 @@ export default function MultiScrape() {
               {doneRefs.length} traité(s) —{' '}
               {Object.entries(refsInfo).filter(([, v]) => !v.dans_excel).length} nouveau(x)
             </span>
-            {refsAffichees.some(aAppliquer) && (
+            {refsAffichees.some(aActionner) && (
               <button className={styles.btnMajLot} onClick={appliquerTout} disabled={busy}>
                 {busy ? <><Loader size={13} className={styles.spin}/> Application…</> : <><CheckCircle2 size={13}/> Appliquer tout</>}
               </button>
@@ -692,7 +746,7 @@ export default function MultiScrape() {
             <tbody>
               {refsAffichees.map((ref, i) => {
                 const p = refsExcelMap.get(norm(ref))
-                const intra = !aAppliquer(ref)
+                const intra = !trouverPrix(ref) && !manuelsHorsConc(ref)
                 const estNouveau = refsInfo[ref] && !refsInfo[ref].dans_excel
                 const prixExcel = excelPrix(p)
                 const ecoExcel = p ? num(val(p, ['eco_part'])) : null
@@ -842,7 +896,9 @@ export default function MultiScrape() {
                         ? <span className={styles.statutSupp}><Trash2 size={13}/> Supprimer</span>
                         : sansPrixSite(ref)
                           ? <span className={styles.statutIntra}><XCircle size={13}/>-</span>
-                          : <span className={styles.statutOk}><CheckCircle2 size={13}/> Trouvé</span>}
+                          : refsInfo[ref]?.dans_excel && estAJour(ref) && !aManuels(ref)
+                            ? <span className={styles.statutOk}><CheckCircle2 size={13}/> À jour</span>
+                            : <span className={styles.statutOk}><CheckCircle2 size={13}/> Trouvé</span>}
                     </td>
                     <td>
                       {aSupprimer(ref) ? (
@@ -851,7 +907,7 @@ export default function MultiScrape() {
                           disabled={busy}>
                           <Trash2 size={12}/> Supprimer
                         </button>
-                      ) : trouverPrix(ref) ? (
+                      ) : aActionner(ref) ? (
                         <button className={styles.btnMaj}
                           onClick={() => appliquer(ref)}
                           disabled={busy}>
@@ -859,14 +915,7 @@ export default function MultiScrape() {
                           {estNouveau ? 'à ajouter' : 'à mettre à jour'}
                         </button>
                       ) : (
-                        !refsInfo[ref]?.dans_excel && manuelsHorsConc(ref) && (
-                          <button className={styles.btnMaj}
-                            onClick={() => appliquer(ref)}
-                            disabled={busy}>
-                            {busy ? <Loader size={12} className={styles.spin}/> : <RefreshCw size={12}/>}
-                            à ajouter
-                          </button>
-                        )
+                        <span className={styles.muted}>—</span>
                       )}
                     </td>
                   </tr>
