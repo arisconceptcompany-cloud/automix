@@ -71,13 +71,20 @@ export default function Excel() {
     form.append('fichier', file)
     try {
       const r = await axios.post('/api/excel/upload', form, {
-        onUploadProgress: e => setUploadProgress(Math.round((e.loaded / e.total) * 100))
+        timeout: 600000,
+        onUploadProgress: e => {
+          setUploadProgress(Math.round((e.loaded / e.total) * 100))
+          if (e.loaded === e.total) {
+            setMsg({ type: 'warn', texte: 'Fichier envoyé — traitement en cours…' })
+          }
+        }
       })
       setMsg({ type: 'ok', texte: `✅ ${r.data.message}` })
       invalidatePrefix('excel_')
       await charger(true)
     } catch (e) {
-      setMsg({ type: 'err', texte: e.response?.data?.erreur || "Erreur lors de l'import" })
+      const te = e.response?.data?.erreur || "Erreur lors de l'import"
+      setMsg({ type: 'err', texte: e.code === 'ECONNABORTED' ? 'Traitement trop long — réessayez' : te })
       setLoading(false)
     } finally {
       setUploadProgress(null)
