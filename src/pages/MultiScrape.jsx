@@ -71,6 +71,7 @@ export default function MultiScrape() {
 
   const [msg, setMsg] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [busyRefs, setBusyRefs] = useState({})
   const [pleinEcran, setPleinEcran] = useState(false)
   const [manuels, setManuels] = useState({})
 
@@ -341,7 +342,8 @@ export default function MultiScrape() {
     return ['ean13', 'famille', 'sous_famille', 'nom'].some(k => String(m[k] || '').trim() !== '')
   }
   const sansPrixSite = (ref) => !trouverPrix(ref)
-  const aSupprimer = (ref) => sansPrixSite(ref) && !!refsInfo[ref]?.dans_excel
+  const aSupprimer = (ref) =>
+    status !== 'running' && refsDoneSet.has(ref) && sansPrixSite(ref) && !!refsInfo[ref]?.dans_excel
 
   const ALT_EXCEL = { cedi: ['cedi'], findis: ['find', 'findis'], gpdis: ['gpdis'], sogam: ['sogam'] }
 
@@ -378,7 +380,7 @@ export default function MultiScrape() {
     const conc1Auto = conc1Map[ref]?.prix ?? null
     const conc1Manuel = (m.conc1 || '').trim()
     if (Object.keys(sites).length === 0 && !aManuels(ref) && conc1Auto == null && !conc1Manuel) return
-    setBusy(true)
+    if (!silencieux) setBusyRefs(prev => ({ ...prev, [ref]: true }))
     try {
       const base = {
         reference: ref,
@@ -421,22 +423,20 @@ export default function MultiScrape() {
     } catch (e) {
       if (!silencieux) setMsg({ type: 'err', texte: e.response?.data?.erreur || "Erreur lors de l'application" })
     } finally {
-      if (!silencieux) setBusy(false)
+      if (!silencieux) setBusyRefs(prev => { const n = { ...prev }; delete n[ref]; return n })
     }
   }
 
   const appliquerTout = async () => {
     setBusy(true)
     let maj = 0, ajout = 0, sup = 0
-    const suppRefs = []
     for (const ref of Object.keys(results)) {
       if (aSupprimer(ref)) {
         try {
           await axios.delete('/api/multi-scraper/supprimer-reference', { data: { reference: ref } })
           sup++
-          suppRefs.push(ref)
         } catch {
-          // ligne ignorée si sa suppression a échoué
+          // ligne ignorée si son marquage a échoué
         }
         continue
       }
@@ -451,38 +451,24 @@ export default function MultiScrape() {
         // ligne ignorée si son application a échoué
       }
     }
-    if (sup > 0) {
-      const setS = new Set(suppRefs)
-      setResults(prev => { const n = {}; for (const k of Object.keys(prev)) if (!setS.has(k)) n[k] = prev[k]; return n })
-      setRefsInfo(prev => { const n = {}; for (const k of Object.keys(prev)) if (!setS.has(k)) n[k] = prev[k]; return n })
-      setConc1Map(prev => { const n = {}; for (const k of Object.keys(prev)) if (!setS.has(k)) n[k] = prev[k]; return n })
-      setDispoMap(prev => { const n = {}; for (const k of Object.keys(prev)) if (!setS.has(k)) n[k] = prev[k]; return n })
-      setDoneRefs(prev => prev.filter(x => !setS.has(x)))
-    }
     setBusy(false)
     chargerProduits()
     const morceaux = []
     if (maj) morceaux.push(`${maj} mis à jour`)
     if (ajout) morceaux.push(`${ajout} ajouté(s)`)
-    if (sup) morceaux.push(`${sup} supprimé(s)`)
+    if (sup) morceaux.push(`${sup} marqué(s) en rouge`)
     setMsg({ type: 'ok', texte: morceaux.length ? `${morceaux.join(', ')} dans l'Excel` : "Rien à appliquer" })
   }
 
   const supprimer = async (ref) => {
-    setBusy(true)
+    setBusyRefs(prev => ({ ...prev, [ref]: true }))
     try {
       const r = await axios.delete('/api/multi-scraper/supprimer-reference', { data: { reference: ref } })
-      setResults(prev => { const n = { ...prev }; delete n[ref]; return n })
-      setRefsInfo(prev => { const n = { ...prev }; delete n[ref]; return n })
-      setConc1Map(prev => { const n = { ...prev }; delete n[ref]; return n })
-      setDispoMap(prev => { const n = { ...prev }; delete n[ref]; return n })
-      setDoneRefs(prev => prev.filter(x => x !== ref))
-      chargerProduits()
       setMsg({ type: 'ok', texte: r.data.message })
     } catch (e) {
-      setMsg({ type: 'err', texte: e.response?.data?.erreur || "Erreur lors de la suppression" })
+      setMsg({ type: 'err', texte: e.response?.data?.erreur || "Erreur lors du marquage en rouge" })
     } finally {
-      setBusy(false)
+      setBusyRefs(prev => { const n = { ...prev }; delete n[ref]; return n })
     }
   }
 
@@ -904,14 +890,14 @@ export default function MultiScrape() {
                       {aSupprimer(ref) ? (
                         <button className={styles.btnSupp}
                           onClick={() => supprimer(ref)}
-                          disabled={busy}>
-                          <Trash2 size={12}/> Supprimer
+                          disabled={busy || busyRefs[ref]}>
+                          {busyRefs[ref] ? <Loader size={12} className={styles.spin}/> : <Trash2 size={12}/>} Supprimer
                         </button>
                       ) : aActionner(ref) ? (
                         <button className={styles.btnMaj}
                           onClick={() => appliquer(ref)}
-                          disabled={busy}>
-                          {busy ? <Loader size={12} className={styles.spin}/> : <RefreshCw size={12}/>}
+                          disabled={busy || busyRefs[ref]}>
+                          {busy || busyRefs[ref] ? <Loader size={12} className={styles.spin}/> : <RefreshCw size={12}/>}
                           {estNouveau ? 'à ajouter' : 'à mettre à jour'}
                         </button>
                       ) : (
