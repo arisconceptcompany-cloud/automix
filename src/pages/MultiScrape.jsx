@@ -530,12 +530,26 @@ export default function MultiScrape() {
 
   const detecterFrais = (nom) => {
     const n = (nom || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    const TRES_GRANDS = ['REFRIGERATEUR', 'CONGELATEUR', 'CAVE A VIN', 'CAVE-A-VIN', 'AMERICAIN', 'CONGELATEUR COFFRE', 'CONGELATEUR VERTICAL', 'ARM']
+    const TRES_GRANDS = ['REFRIGERATEUR', 'CONGELATEUR', 'CAVE A VIN', 'CAVE-A-VIN', 'CAVE A BIERE', 'AMERICAIN', 'CONGELATEUR COFFRE', 'CONGELATEUR VERTICAL', 'ARM']
     const GRANDS = ['LAVE LINGE', 'LAVE-LINGE', 'SECHE LINGE', 'SECHE-LINGE', 'LAVE VAISSELLE', 'LAVE-VAISSELLE', 'CUISINIERE', 'CUISIERE', 'PIANO DE CUISSON', 'PIANO-DE-CUISSON', 'FOUR', 'FOURS', 'HOTTE', 'TABLE DE CUISSON', 'PLAQUE DE CUISSON', 'PLAN DE CUISSON']
-    const MOYENS = ['MICRO ONDES', 'MICRO-ONDES', 'CAFE', 'CAFETIERE']
+    const MOYENS = ['MICRO ONDES', 'MICRO-ONDES', 'PETIT MENAGER', 'CAFE', 'CAFETIERE']
     if (TRES_GRANDS.some(g => n.includes(g))) return 80
     if (GRANDS.some(g => n.includes(g))) return 75
     if (MOYENS.some(g => n.includes(g))) return 60
+    return 50
+  }
+
+  const trancheFrais = (p) => {
+    const f = [val(p, 'grande_famille'), val(p, 'famille'), val(p, 'sous_famille')]
+      .filter(x => x && String(x).trim())
+      .map(x => String(x).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''))
+      .join(' ')
+    const TRES_GRANDS = ['REFRIGERATEUR', 'CONGELATEUR', 'CAVE A VIN', 'CAVE-A-VIN', 'CAVE A BIERE', 'AMERICAIN', 'CONGELATEUR COFFRE', 'CONGELATEUR VERTICAL', 'ARM']
+    const GRANDS = ['LAVE LINGE', 'LAVE-LINGE', 'SECHE LINGE', 'SECHE-LINGE', 'LAVE VAISSELLE', 'LAVE-VAISSELLE', 'CUISINIERE', 'CUISIERE', 'PIANO DE CUISSON', 'PIANO-DE-CUISSON', 'FOUR', 'FOURS', 'HOTTE', 'TABLE DE CUISSON', 'PLAQUE DE CUISSON', 'PLAN DE CUISSON']
+    const MOYENS = ['MICRO ONDES', 'MICRO-ONDES', 'PETIT MENAGER', 'CAFE', 'CAFETIERE']
+    if (TRES_GRANDS.some(g => f.includes(g))) return 80
+    if (GRANDS.some(g => f.includes(g))) return 75
+    if (MOYENS.some(g => f.includes(g))) return 60
     return 50
   }
 
@@ -545,6 +559,11 @@ export default function MultiScrape() {
     if (v !== '') {
       const n = parseFloat(v)
       if (!isNaN(n)) return n
+    }
+    const p = refsExcelMap.get(norm(ref))
+    if (p) {
+      const t = trancheFrais(p)
+      if (t != null) return t
     }
     return detecterFrais(nom)
   }
