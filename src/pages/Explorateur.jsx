@@ -863,7 +863,7 @@ export default function Explorateur() {
       }
       if (saved.url) setUrlSaisie(saved.url)
       if (saved.marques) setMarquesActives(saved.marques)
-      if (saved.marquesDispos) setMarquesDispos(saved.marquesDispos)
+      if (saved.marquesDispos && saved.marquesDispos.length) setMarquesDispos(saved.marquesDispos)
       if (saved.filtreLien) setFiltreLien(saved.filtreLien)
       if (saved.edits) setEdits(saved.edits)
 
@@ -906,7 +906,7 @@ export default function Explorateur() {
       } catch { /* stockage local indisponible */ }
     }
     try { localStorage.removeItem('explorateur_state') } catch { /* ignore */ }
-    setUrlSaisie(''); setMarquesActives([]); setMarquesDispos([])
+    setUrlSaisie(''); setMarquesActives([]); setMarquesDispos(MARQUES_DISPONIBLES)
     setLiens([]); setSiteInfo(null); setLienActif(null); setProduits([])
     setFiltreLien(''); setEdits({}); setLoadingProd(false); setLoadingLiens(false)
     setToast({ message: '🗑 Résultat supprimé', type: 'success' })
