@@ -82,6 +82,14 @@ export default function MultiScrape() {
   const [sessionExiste, setSessionExiste] = useState(false)
   const restoredSelRef = useRef(null)
 
+  const [toasts, setToasts] = useState([])
+  const toastIdRef = useRef(0)
+  const pushToast = (ref, action) => {
+    const id = ++toastIdRef.current
+    setToasts(prev => [...prev.slice(-6), { id, ref, action }])
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4500)
+  }
+
   const manuel = (ref, field) => (manuels[ref] || {})[field] || ''
   const setManuel = (ref, field, v) =>
     setManuels(m => ({ ...m, [ref]: { ...(m[ref] || {}), [field]: v } }))
@@ -331,6 +339,14 @@ export default function MultiScrape() {
     return r && typeof r.ecopart === 'number' ? r.ecopart : null
   }
 
+  const ecoDe = (p) => {
+    if (!p) return null
+    const ttc = num(val(p, ['ep ttc', 'ecopart ttc', 'ecopartttc', 'eco part ttc', 'ep tva', 'ecopart tva']))
+    if (ttc != null) return ttc
+    const ht = num(val(p, ['eco_part', 'ecopart', 'eco-part', 'éco-part']))
+    return ht != null ? Math.round(ht * 1.2 * 100) / 100 : null
+  }
+
   const trouverPrix = (ref) =>
     Object.values(results[ref] || {}).some(r => r && !r.introuvable && r.prix != null)
 
@@ -343,7 +359,8 @@ export default function MultiScrape() {
   }
   const sansPrixSite = (ref) => !trouverPrix(ref)
   const aSupprimer = (ref) =>
-    status !== 'running' && refsDoneSet.has(ref) && sansPrixSite(ref) && !!refsInfo[ref]?.dans_excel
+    status !== 'running' && refsDoneSet.has(ref) && sansPrixSite(ref) &&
+    !!refsInfo[ref]?.dans_excel && !refsInfo[ref]?.supprime
 
   const ALT_EXCEL = { cedi: ['cedi'], findis: ['find', 'findis'], gpdis: ['gpdis'], sogam: ['sogam'] }
 
@@ -362,7 +379,7 @@ export default function MultiScrape() {
     }
     const ecoS = ecoPart(ref)
     if (ecoS != null) {
-      const ecoE = num(val(p, ['eco_part']))
+      const ecoE = ecoDe(p)
       if (ecoE == null || Math.abs(ecoS - ecoE) > 0.001) return false
     }
     return true
@@ -371,7 +388,7 @@ export default function MultiScrape() {
   const aActionner = (ref) => {
     if (refsInfo[ref] && !refsInfo[ref].dans_excel) return trouverPrix(ref) || aManuels(ref)
     if (aSupprimer(ref)) return false
-    return !estAJour(ref) || aManuels(ref)
+    return !(estAJour(ref) || refsInfo[ref]?.maj) || aManuels(ref)
   }
 
   const appliquer = async (ref, silencieux = false) => {
@@ -403,20 +420,27 @@ export default function MultiScrape() {
         r = await axios.post('/api/multi-scraper/ajouter', base)
       }
       const dataMaj = r.data || {}
-      if (refsInfo[ref]?.dans_excel && dataMaj.mis_a_jour > 0) {
-        setProduits(prev => prev.map(p => {
-          const refKey = val(p, ['reference', 'ref', 'sku', 'article'])
-          if (norm(refKey) !== norm(ref)) return p
-          const maj = dataMaj.updated || {}
-          let upd = { ...p }
-          for (const site of SITES) {
-            const nv = num(maj[site])
-            if (nv != null) upd = setCle(upd, SITE_EXCEL_KEY[site], nv)
-          }
-          const np = num(dataMaj.eco_part)
-          if (np != null) upd = setCle(upd, 'eco_part', np)
-          return upd
-        }))
+      if (refsInfo[ref]?.dans_excel) {
+        if (dataMaj.mis_a_jour > 0) {
+          setProduits(prev => prev.map(p => {
+            const refKey = val(p, ['reference', 'ref', 'sku', 'article'])
+            if (norm(refKey) !== norm(ref)) return p
+            const maj = dataMaj.updated || {}
+            let upd = { ...p }
+            for (const site of SITES) {
+              const nv = num(maj[site])
+              if (nv != null) upd = setCle(upd, SITE_EXCEL_KEY[site], nv)
+            }
+            const np = num(dataMaj.eco_part)
+            if (np != null) upd = setCle(upd, 'EP TTC', np)
+            return upd
+          }))
+          setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), maj: true } }))
+          pushToast(ref, 'mis à jour')
+        }
+      } else if (dataMaj.ajout > 0) {
+        setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), dans_excel: true, maj: true } }))
+        pushToast(ref, 'ajouté')
       }
       if (!silencieux) setMsg({ type: 'ok', texte: r.data.message })
       return r.data
@@ -430,27 +454,35 @@ export default function MultiScrape() {
   const appliquerTout = async () => {
     setBusy(true)
     let maj = 0, ajout = 0, sup = 0
-    for (const ref of Object.keys(results)) {
-      if (aSupprimer(ref)) {
+    const refs = Object.keys(results).filter(r => aSupprimer(r) || aActionner(r))
+    const LIMITE = 6
+    let suivant = 0
+    const travailleurs = Array.from({ length: Math.min(LIMITE, refs.length) }, async () => {
+      while (suivant < refs.length) {
+        const ref = refs[suivant++]
+        if (aSupprimer(ref)) {
+          try {
+            await axios.delete('/api/multi-scraper/supprimer-reference', { data: { reference: ref } })
+            setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), supprime: true } }))
+            sup++
+            pushToast(ref, 'supprimé')
+          } catch {
+            // ligne ignorée si son marquage a échoué
+          }
+          continue
+        }
         try {
-          await axios.delete('/api/multi-scraper/supprimer-reference', { data: { reference: ref } })
-          sup++
+          const d = await appliquer(ref, true)
+          if (d) {
+            if (d.ajout > 0) ajout++
+            else if (d.mis_a_jour > 0) maj++
+          }
         } catch {
-          // ligne ignorée si son marquage a échoué
+          // ligne ignorée si son application a échoué
         }
-        continue
       }
-      if (!aActionner(ref)) continue
-      try {
-        const d = await appliquer(ref, true)
-        if (d) {
-          if (d.ajout > 0) ajout++
-          else if (d.mis_a_jour > 0) maj++
-        }
-      } catch {
-        // ligne ignorée si son application a échoué
-      }
-    }
+    })
+    await Promise.all(travailleurs)
     setBusy(false)
     chargerProduits()
     const morceaux = []
@@ -464,7 +496,9 @@ export default function MultiScrape() {
     setBusyRefs(prev => ({ ...prev, [ref]: true }))
     try {
       const r = await axios.delete('/api/multi-scraper/supprimer-reference', { data: { reference: ref } })
+      setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), supprime: true } }))
       setMsg({ type: 'ok', texte: r.data.message })
+      pushToast(ref, 'supprimé')
     } catch (e) {
       setMsg({ type: 'err', texte: e.response?.data?.erreur || "Erreur lors du marquage en rouge" })
     } finally {
@@ -542,6 +576,18 @@ export default function MultiScrape() {
         <div className={`${styles.msg} ${styles['msg_' + msg.type]}`}>
           <span>{msg.texte}</span>
           <button onClick={() => setMsg(null)}>✕</button>
+        </div>
+      )}
+
+      {toasts.length > 0 && (
+        <div className={styles.toasts}>
+          {toasts.map(t => (
+            <div key={t.id} className={styles.toast}>
+              <CheckCircle2 size={14} />
+              <b>{t.ref}</b>
+              <span>{t.action}</span>
+            </div>
+          ))}
         </div>
       )}
 
@@ -735,7 +781,7 @@ export default function MultiScrape() {
                 const intra = !trouverPrix(ref) && !manuelsHorsConc(ref)
                 const estNouveau = refsInfo[ref] && !refsInfo[ref].dans_excel
                 const prixExcel = excelPrix(p)
-                const ecoExcel = p ? num(val(p, ['eco_part'])) : null
+                const ecoExcel = p ? ecoDe(p) : null
                 const nom = (results[ref]?.cedi?.nom || p ? String(val(p, ['designation', 'désignation', 'nom', 'name']) || '') : '') || ''
                 const minAll = (() => {
                   const vals = prixExcel.map(x => x.v)
@@ -882,7 +928,7 @@ export default function MultiScrape() {
                         ? <span className={styles.statutSupp}><Trash2 size={13}/> Supprimer</span>
                         : sansPrixSite(ref)
                           ? <span className={styles.statutIntra}><XCircle size={13}/>-</span>
-                          : refsInfo[ref]?.dans_excel && estAJour(ref) && !aManuels(ref)
+                          : refsInfo[ref]?.dans_excel && (estAJour(ref) || refsInfo[ref]?.maj) && !aManuels(ref)
                             ? <span className={styles.statutOk}><CheckCircle2 size={13}/> À jour</span>
                             : <span className={styles.statutOk}><CheckCircle2 size={13}/> Trouvé</span>}
                     </td>
