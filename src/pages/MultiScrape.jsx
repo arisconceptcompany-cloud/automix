@@ -347,6 +347,18 @@ export default function MultiScrape() {
     return ht != null ? Math.round(ht * 1.2 * 100) / 100 : null
   }
 
+  /** Eco-part effective : saisie manuelle > site scrapé > Excel. */
+  const ecoUtilise = (ref) => {
+    const v = String((manuels[ref] || {}).eco || '').trim()
+    if (v !== '') {
+      const n = parseFloat(v)
+      if (!isNaN(n)) return n
+    }
+    const site = ecoPart(ref)
+    if (site != null) return site
+    return ecoDe(refsExcelMap.get(norm(ref)))
+  }
+
   const trouverPrix = (ref) =>
     Object.values(results[ref] || {}).some(r => r && !r.introuvable && r.prix != null)
 
@@ -357,10 +369,15 @@ export default function MultiScrape() {
     const m = manuels[ref] || {}
     return ['ean13', 'famille', 'sous_famille', 'nom'].some(k => String(m[k] || '').trim() !== '')
   }
+  const viderManuels = (ref) => {
+    setManuels(prev => {
+      if (!prev[ref]) return prev
+      const n = { ...prev }
+      delete n[ref]
+      return n
+    })
+  }
   const sansPrixSite = (ref) => !trouverPrix(ref)
-  const aSupprimer = (ref) =>
-    status !== 'running' && refsDoneSet.has(ref) && sansPrixSite(ref) &&
-    !!refsInfo[ref]?.dans_excel && !refsInfo[ref]?.supprime
 
   const ALT_EXCEL = { cedi: ['cedi'], findis: ['find', 'findis'], gpdis: ['gpdis'], sogam: ['sogam'] }
 
@@ -377,7 +394,8 @@ export default function MultiScrape() {
       if (ev == null) return false
       if (Math.abs(ev - sv) > 0.001) return false
     }
-    const ecoS = ecoPart(ref)
+    // Comparer l'éco effective (saisie ou scrapée) à celle déjà en Excel
+    const ecoS = ecoUtilise(ref)
     if (ecoS != null) {
       const ecoE = ecoDe(p)
       if (ecoE == null || Math.abs(ecoS - ecoE) > 0.001) return false
@@ -388,7 +406,9 @@ export default function MultiScrape() {
   const aActionner = (ref) => {
     if (refsInfo[ref] && !refsInfo[ref].dans_excel) return trouverPrix(ref) || aManuels(ref)
     if (aSupprimer(ref)) return false
-    return !(estAJour(ref) || refsInfo[ref]?.maj) || aManuels(ref)
+    // Déjà marqué à jour : ne réafficher le bouton que si l'utilisateur a re-saisi un champ
+    if (refsInfo[ref]?.maj) return aManuels(ref)
+    return !estAJour(ref) || aManuels(ref)
   }
 
   const appliquer = async (ref, silencieux = false) => {
@@ -396,7 +416,8 @@ export default function MultiScrape() {
     const m = manuels[ref] || {}
     const conc1Auto = conc1Map[ref]?.prix ?? null
     const conc1Manuel = (m.conc1 || '').trim()
-    if (Object.keys(sites).length === 0 && !aManuels(ref) && conc1Auto == null && !conc1Manuel) return
+    const ecoVal = ecoUtilise(ref)
+    if (Object.keys(sites).length === 0 && !aManuels(ref) && conc1Auto == null && !conc1Manuel && ecoVal == null) return
     if (!silencieux) setBusyRefs(prev => ({ ...prev, [ref]: true }))
     try {
       const base = {
@@ -412,7 +433,7 @@ export default function MultiScrape() {
       const fraisVal = (m.frais || '').trim()
       const fraisNum = fraisVal !== '' && !isNaN(parseFloat(fraisVal)) ? parseFloat(fraisVal) : null
       if (fraisNum != null) base.frais = fraisNum
-      base.eco_part = ecoPart(ref)
+      if (ecoVal != null) base.eco_part = ecoVal
       let r
       if (refsInfo[ref]?.dans_excel) {
         r = await axios.post('/api/multi-scraper/mettre-a-jour', base)
@@ -421,25 +442,26 @@ export default function MultiScrape() {
       }
       const dataMaj = r.data || {}
       if (refsInfo[ref]?.dans_excel) {
-        if (dataMaj.mis_a_jour > 0) {
-          setProduits(prev => prev.map(p => {
-            const refKey = val(p, ['reference', 'ref', 'sku', 'article'])
-            if (norm(refKey) !== norm(ref)) return p
-            const maj = dataMaj.updated || {}
-            let upd = { ...p }
-            for (const site of SITES) {
-              const nv = num(maj[site])
-              if (nv != null) upd = setCle(upd, SITE_EXCEL_KEY[site], nv)
-            }
-            const np = num(dataMaj.eco_part)
-            if (np != null) upd = setCle(upd, 'EP TTC', np)
-            return upd
-          }))
-          setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), maj: true } }))
-          pushToast(ref, 'mis à jour')
-        }
+        // Succès HTTP : toujours marquer à jour (même si mis_a_jour === 0)
+        setProduits(prev => prev.map(p => {
+          const refKey = val(p, ['reference', 'ref', 'sku', 'article'])
+          if (norm(refKey) !== norm(ref)) return p
+          const maj = dataMaj.updated || {}
+          let upd = { ...p }
+          for (const site of SITES) {
+            const nv = num(maj[site])
+            if (nv != null) upd = setCle(upd, SITE_EXCEL_KEY[site], nv)
+          }
+          const np = num(dataMaj.eco_part != null ? dataMaj.eco_part : ecoVal)
+          if (np != null) upd = setCle(upd, 'EP TTC', np)
+          return upd
+        }))
+        setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), maj: true, dans_excel: true } }))
+        viderManuels(ref)
+        pushToast(ref, 'mis à jour')
       } else if (dataMaj.ajout > 0) {
         setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), dans_excel: true, maj: true } }))
+        viderManuels(ref)
         pushToast(ref, 'ajouté')
       }
       if (!silencieux) setMsg({ type: 'ok', texte: r.data.message })
@@ -475,7 +497,7 @@ export default function MultiScrape() {
           const d = await appliquer(ref, true)
           if (d) {
             if (d.ajout > 0) ajout++
-            else if (d.mis_a_jour > 0) maj++
+            else maj++
           }
         } catch {
           // ligne ignorée si son application a échoué
@@ -497,6 +519,7 @@ export default function MultiScrape() {
     try {
       const r = await axios.delete('/api/multi-scraper/supprimer-reference', { data: { reference: ref } })
       setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), supprime: true } }))
+      viderManuels(ref)
       setMsg({ type: 'ok', texte: r.data.message })
       pushToast(ref, 'supprimé')
     } catch (e) {
@@ -568,9 +591,6 @@ export default function MultiScrape() {
     return detecterFrais(nom)
   }
 
-  const refsAffichees = Object.keys(refsInfo).filter(ref => results[ref])
-  const pct = total > 0 ? Math.round((fait / total) * 100) : 0
-
   const excelPrix = (p) => {
     if (!p) return []
     const out = []
@@ -580,6 +600,53 @@ export default function MultiScrape() {
     }
     return out
   }
+
+  const prixMinDe = (ref) => {
+    const p = refsExcelMap.get(norm(ref))
+    const vals = excelPrix(p).map(x => x.v)
+    for (const r of Object.values(results[ref] || {})) {
+      if (r && !r.introuvable && r.prix != null) {
+        const v = parseFloat(r.prix)
+        if (!isNaN(v)) vals.push(v)
+      }
+    }
+    return vals.length ? Math.min(...vals) : null
+  }
+
+  const conc1PrixDe = (ref) => {
+    const auto = conc1Map[ref]?.prix
+    if (auto != null && !isNaN(parseFloat(auto))) return parseFloat(auto)
+    const m = String((manuels[ref] || {}).conc1 || '').trim()
+    if (m !== '') {
+      const n = parseFloat(m)
+      if (!isNaN(n)) return n
+    }
+    return null
+  }
+
+  const miniCalculePour = (ref) => {
+    const minAll = prixMinDe(ref)
+    if (minAll == null) return null
+    const p = refsExcelMap.get(norm(ref))
+    const nom = (results[ref]?.cedi?.nom || (p ? String(val(p, ['designation', 'désignation', 'nom', 'name']) || '') : '')) || ''
+    const frais = fraisDe(ref, nom)
+    const eco = ecoUtilise(ref)
+    const ecoN = eco != null && !isNaN(parseFloat(eco)) ? parseFloat(eco) : 0
+    return Math.round((minAll + frais + ecoN) * 1.2 / 0.98 * 100) / 100
+  }
+
+  /** À supprimer si : aucun prix site, OU mini > Conc 1 (marquage rouge Excel, pas suppression de ligne). */
+  const aSupprimer = (ref) => {
+    if (status === 'running' || !refsDoneSet.has(ref)) return false
+    if (!refsInfo[ref]?.dans_excel || refsInfo[ref]?.supprime) return false
+    if (sansPrixSite(ref)) return true
+    const mini = miniCalculePour(ref)
+    const conc1 = conc1PrixDe(ref)
+    return mini != null && conc1 != null && mini > conc1
+  }
+
+  const refsAffichees = Object.keys(refsInfo).filter(ref => results[ref])
+  const pct = total > 0 ? Math.round((fait / total) * 100) : 0
 
   return (
     <div className={`${styles.page}${pleinEcran ? ' ' + styles.pleinEcran : ''}`}>
@@ -757,6 +824,7 @@ export default function MultiScrape() {
             </button>
           </div>
 
+          <div className={styles.tableScroll}>
           <table className={styles.table}>
             <colgroup>
               <col className={styles.colNum}/>
@@ -810,7 +878,11 @@ export default function MultiScrape() {
                   return nums.length ? Math.min(...nums) : null
                 })()
                 const fraisUsed = fraisDe(ref, nom)
-                const ecoUsed = ecoPart(ref) ?? ecoExcel ?? 0
+                const ecoManuel = String((manuels[ref] || {}).eco || '').trim()
+                const ecoDefaut = ecoPart(ref) ?? ecoExcel
+                const ecoUsed = ecoManuel !== '' && !isNaN(parseFloat(ecoManuel))
+                  ? parseFloat(ecoManuel)
+                  : (ecoDefaut ?? 0)
                 const miniLive = minAll != null
                   ? Math.round((minAll + fraisUsed + (isNaN(parseFloat(ecoUsed)) ? 0 : parseFloat(ecoUsed))) * 1.2 / 0.98 * 100) / 100
                   : null
@@ -908,21 +980,20 @@ export default function MultiScrape() {
                       </div>
                     </td>
                     <td className={styles.ecoCell}>
-                      {(() => {
-                        const ecoSite = ecoPart(ref)
-                        if (ecoSite != null && ecoExcel != null && Math.abs(ecoSite - ecoExcel) > 0.001) {
-                          return (
-                            <span>
-                              <span style={{ color: '#22c55e', fontWeight: 700 }} title="Eco-part Excel">{ecoExcel.toFixed(2)} €</span>
-                              <span style={{ margin: '0 3px', opacity: .4 }}>/</span>
-                              <span style={{ color: '#f97316', fontWeight: 700 }} title="Eco-part site">{ecoSite.toFixed(2)} €</span>
-                            </span>
-                          )
+                      <input
+                        className={styles.saisie}
+                        inputMode="decimal"
+                        style={{ width: 64, color: ecoManuel !== '' ? 'var(--text)' : (ecoPart(ref) != null ? '#f97316' : '#22c55e'), fontWeight: 700 }}
+                        value={ecoManuel !== '' ? ecoManuel : (ecoDefaut != null ? String(ecoDefaut) : '')}
+                        placeholder="Eco…"
+                        title={
+                          ecoExcel != null && ecoPart(ref) != null && Math.abs(ecoExcel - ecoPart(ref)) > 0.001
+                            ? `Excel ${ecoExcel.toFixed(2)} € / Site ${ecoPart(ref).toFixed(2)} € — modifiable (utilisé pour le mini)`
+                            : `Eco-part utilisée pour le mini : ${ecoUsed} € (modifiable)`
                         }
-                        if (ecoSite != null) return <span style={{ color: '#f97316', fontWeight: 700 }}>{ecoSite.toFixed(2)} €</span>
-                        if (ecoExcel != null) return <span style={{ color: '#22c55e', fontWeight: 700 }}>{ecoExcel.toFixed(2)} €</span>
-                        return <span className={styles.badgeGris}>—</span>
-                      })()}
+                        onChange={e => setManuel(ref, 'eco', e.target.value)}
+                        onClick={e => e.stopPropagation()}
+                      />
                     </td>
                     <td className={styles.fraisCell}>
                       <input
@@ -944,7 +1015,7 @@ export default function MultiScrape() {
                     </td>
                     <td>
                       {aSupprimer(ref)
-                        ? <span className={styles.statutSupp}><Trash2 size={13}/> Supprimer</span>
+                        ? <span className={styles.statutSupp} title={sansPrixSite(ref) ? 'Aucun prix sur CEDI/FINDIS/GPDIS/SOGAM' : 'Mini supérieur au prix concurrent (Conc 1)'}><Trash2 size={13}/> Supprimer</span>
                         : sansPrixSite(ref)
                           ? <span className={styles.statutIntra}><XCircle size={13}/>-</span>
                           : refsInfo[ref]?.dans_excel && (estAJour(ref) || refsInfo[ref]?.maj) && !aManuels(ref)
@@ -955,7 +1026,8 @@ export default function MultiScrape() {
                       {aSupprimer(ref) ? (
                         <button className={styles.btnSupp}
                           onClick={() => supprimer(ref)}
-                          disabled={busy || busyRefs[ref]}>
+                          disabled={busy || busyRefs[ref]}
+                          title={sansPrixSite(ref) ? 'Marquer en rouge : aucun prix site' : 'Marquer en rouge : mini > Conc 1'}>
                           {busyRefs[ref] ? <Loader size={12} className={styles.spin}/> : <Trash2 size={12}/>} Supprimer
                         </button>
                       ) : aActionner(ref) ? (
@@ -974,6 +1046,7 @@ export default function MultiScrape() {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
