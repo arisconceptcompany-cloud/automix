@@ -176,52 +176,66 @@ export default function MultiScrape() {
   useEffect(() => {
     let saved = null
     try { saved = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null') }
-    catch { /* lecture locale non bloquante */ }
+    catch { saved = null }
     if (!saved || !saved.jobId) return
 
     if (Array.isArray(saved.refsSel)) restoredSelRef.current = saved.refsSel
 
-    axios.get(`/api/multi-scraper/statut/${saved.jobId}`)
-      .then(r => {
-        const d = r.data
-        if (saved.filtre) setFiltre(saved.filtre)
-        if (saved.manuels) setManuels(saved.manuels)
-        if (saved.sitesActifs) setSitesActifs(saved.sitesActifs)
-        if (d.duree != null) setElapsed(d.duree)
-        setSessionExiste(true)
-        setJobId(saved.jobId)
-        setStatus(d.status || 'idle')
-        setFait(d.fait ?? 0)
-        setTotal(d.total ?? 0)
-        setCurrent(d.current)
-        setResults(d.results || {})
-        setConc1Map(d.conc1 || {})
-        setDispoMap(d.dispo || {})
-        const nd = d.done_refs || []
-        setDoneRefs(nd)
-        if (nd.length) {
-          const ndSet = new Set(nd)
-          setRefsSel(prev => {
-            const n = prev.filter(x => !ndSet.has(x))
-            return n.length === prev.length ? prev : n
-          })
-        }
-        setRefsInfo(d.refs || {})
-        if (d.message) setJobMsg(d.message)
-        if ((d.status === 'running') && d.duree != null) {
-          startedAt.current = Date.now() - d.duree * 1000
-        }
-      })
-      .catch(() => {
-        try { localStorage.removeItem(SESSION_KEY) }
-        catch { /* stockage local indisponible */ }
-        setSessionExiste(false)
-      })
+    let essais = 0
+    let timerRestore = null
+    const recupererStatut = () => {
+      axios.get(`/api/multi-scraper/statut/${saved.jobId}`)
+        .then(r => {
+          const d = r.data
+          if (saved.filtre) setFiltre(saved.filtre)
+          if (saved.manuels) setManuels(saved.manuels)
+          if (saved.sitesActifs) setSitesActifs(saved.sitesActifs)
+          setSessionExiste(true)
+          setJobId(saved.jobId)
+          setStatus(d.status || 'idle')
+          setFait(d.fait ?? 0)
+          setTotal(d.total ?? 0)
+          setCurrent(d.current)
+          setResults(d.results || {})
+          setConc1Map(d.conc1 || {})
+          setDispoMap(d.dispo || {})
+          const nd = d.done_refs || []
+          setDoneRefs(nd)
+          if (nd.length) {
+            const ndSet = new Set(nd)
+            setRefsSel(prev => {
+              const n = prev.filter(x => !ndSet.has(x))
+              return n.length === prev.length ? prev : n
+            })
+          }
+          setRefsInfo(d.refs || {})
+          if (d.message) setJobMsg(d.message)
+          if (d.duree != null) setElapsed(d.duree)
+          if (d.status === 'running' && d.duree != null) {
+            startedAt.current = Date.now() - d.duree * 1000
+          }
+        })
+        .catch(err => {
+          if (err.response && err.response.status === 404) {
+            try { localStorage.removeItem(SESSION_KEY) }
+            catch { /* stockage local indisponible */ }
+            setSessionExiste(false)
+            return
+          }
+          if (essais < 8) {
+            essais++
+            timerRestore = setTimeout(recupererStatut, 4000)
+          } else {
+            setJobMsg('Serveur injoignable — recharger la page pour réessayer la synchronisation')
+          }
+        })
+    }
+    recupererStatut()
+    return () => { if (timerRestore) clearTimeout(timerRestore) }
   }, [])
 
   useEffect(() => {
     if (!jobId || status !== 'running') return
-    let stop = false
     const timer = setInterval(async () => {
       try {
         const r = await axios.get(`/api/multi-scraper/statut/${jobId}`)
@@ -249,12 +263,7 @@ export default function MultiScrape() {
           if (d.message) setJobMsg(d.message)
         }
       } catch {
-        if (!stop) {
-          stop = true
-          clearInterval(timer)
-          setStatus('error')
-          setJobMsg('Impossible de suivre le job — le serveur a peut-être redémarré. Relance la recherche.')
-        }
+        setJobMsg(prev => prev === '' ? 'Synchronisation interrompue — nouvelle tentative en cours…' : prev)
       }
     }, 2000)
     return () => clearInterval(timer)
