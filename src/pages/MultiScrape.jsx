@@ -10,7 +10,7 @@ import styles from './MultiScrape.module.css'
 
 const SITES = ['cedi', 'findis', 'gpdis', 'sogam']
 const SITE_LABEL = { cedi: 'CEDI', findis: 'FINDIS', gpdis: 'GPDIS', sogam: 'SOGAM' }
-const SITE_EXCEL_KEY = { cedi: 'cedi', findis: 'find', gpdis: 'gpdis', sogam: 'sogam' }
+const SITE_EXCEL_KEY = { cedi: 'cedi', findis: 'findis', gpdis: 'gpdis', sogam: 'sogam' }
 const SESSION_KEY = 'multiscrape_session_v1'
 
 const num = (v) => {
@@ -334,11 +334,16 @@ export default function MultiScrape() {
 
   const payloadSites = (ref) => {
     const sites = {}
+    const enCours = status === 'running' || status === 'pending'
     for (const site of SITES) {
       const r = (results[ref] || {})[site]
-      if (!r) continue
-      if (r.introuvable) sites[site] = { introuvable: true }
-      else sites[site] = { prix: r.prix }
+      if (r && !r.introuvable && r.prix != null) {
+        sites[site] = { prix: r.prix }
+      } else if (r && r.introuvable) {
+        sites[site] = { introuvable: true }
+      } else if (!enCours) {
+        sites[site] = { introuvable: true }
+      }
     }
     return sites
   }
@@ -413,6 +418,7 @@ export default function MultiScrape() {
   }
 
   const aActionner = (ref) => {
+    if (refsInfo[ref]?.supprime) return false
     if (refsInfo[ref] && !refsInfo[ref].dans_excel) return trouverPrix(ref) || aManuels(ref)
     if (aSupprimer(ref)) return false
     // Déjà marqué à jour : ne réafficher le bouton que si l'utilisateur a re-saisi un champ
@@ -460,6 +466,7 @@ export default function MultiScrape() {
           for (const site of SITES) {
             const nv = num(maj[site])
             if (nv != null) upd = setCle(upd, SITE_EXCEL_KEY[site], nv)
+            else if (sites[site] && sites[site].introuvable) upd = setCle(upd, SITE_EXCEL_KEY[site], null)
           }
           const np = num(dataMaj.eco_part != null ? dataMaj.eco_part : ecoVal)
           if (np != null) upd = setCle(upd, 'EP TTC', np)
@@ -611,8 +618,7 @@ export default function MultiScrape() {
   }
 
   const prixMinDe = (ref) => {
-    const p = refsExcelMap.get(norm(ref))
-    const vals = excelPrix(p).map(x => x.v)
+    const vals = []
     for (const r of Object.values(results[ref] || {})) {
       if (r && !r.introuvable && r.prix != null) {
         const v = parseFloat(r.prix)
@@ -635,7 +641,7 @@ export default function MultiScrape() {
 
   const miniCalculePour = (ref) => {
     const minAll = prixMinDe(ref)
-    if (minAll == null) return null
+    if (minAll == null) return 0
     const p = refsExcelMap.get(norm(ref))
     const nom = (results[ref]?.cedi?.nom || (p ? String(val(p, ['designation', 'désignation', 'nom', 'name']) || '') : '')) || ''
     const frais = fraisDe(ref, nom)
@@ -880,10 +886,10 @@ export default function MultiScrape() {
                 const ecoExcel = p ? ecoDe(p) : null
                 const nom = (results[ref]?.cedi?.nom || p ? String(val(p, ['designation', 'désignation', 'nom', 'name']) || '') : '') || ''
                 const minAll = (() => {
-                  const vals = prixExcel.map(x => x.v)
-                  const vue = Object.values(results[ref] || {}).filter(r => r && !r.introuvable && r.prix != null).map(r => parseFloat(r.prix))
-                  vals.push(...vue)
-                  const nums = vals.filter(v => !isNaN(v))
+                  const nums = Object.values(results[ref] || {})
+                    .filter(r => r && !r.introuvable && r.prix != null)
+                    .map(r => parseFloat(r.prix))
+                    .filter(v => !isNaN(v))
                   return nums.length ? Math.min(...nums) : null
                 })()
                 const fraisUsed = fraisDe(ref, nom)
@@ -894,7 +900,7 @@ export default function MultiScrape() {
                   : (ecoDefaut ?? 0)
                 const miniLive = minAll != null
                   ? Math.round((minAll + fraisUsed + (isNaN(parseFloat(ecoUsed)) ? 0 : parseFloat(ecoUsed))) * 1.2 / 0.98 * 100) / 100
-                  : null
+                  : 0
                 const fraisManuel = String((manuels[ref] || {}).frais || '').trim()
                 return (
                   <tr key={ref} className={`${intra ? styles.rowIntrouvable : ''} ${estNouveau ? styles.rowVert : ''}`}>
@@ -1023,16 +1029,20 @@ export default function MultiScrape() {
                       )}
                     </td>
                     <td>
-                      {aSupprimer(ref)
-                        ? <span className={styles.statutSupp} title={sansPrixSite(ref) ? 'Aucun prix sur CEDI/FINDIS/GPDIS/SOGAM' : 'Mini supérieur au prix concurrent (Conc 1)'}><Trash2 size={13}/> Supprimer</span>
-                        : sansPrixSite(ref)
-                          ? <span className={styles.statutIntra}><XCircle size={13}/>-</span>
-                          : refsInfo[ref]?.dans_excel && (estAJour(ref) || refsInfo[ref]?.maj) && !aManuels(ref)
-                            ? <span className={styles.statutOk}><CheckCircle2 size={13}/> À jour</span>
-                            : <span className={styles.statutOk}><CheckCircle2 size={13}/> Trouvé</span>}
+                      {refsInfo[ref]?.supprime
+                        ? <span className={styles.statutSupp} title="Référence marquée en rouge (à supprimer)"><Trash2 size={13}/> Supprimé</span>
+                        : aSupprimer(ref)
+                          ? <span className={styles.statutSupp} title={sansPrixSite(ref) ? 'Aucun prix sur CEDI/FINDIS/GPDIS/SOGAM' : 'Mini supérieur au prix concurrent (Conc 1)'}><Trash2 size={13}/> Supprimer</span>
+                          : sansPrixSite(ref)
+                            ? <span className={styles.statutIntra}><XCircle size={13}/>-</span>
+                            : refsInfo[ref]?.dans_excel && (estAJour(ref) || refsInfo[ref]?.maj) && !aManuels(ref)
+                              ? <span className={styles.statutOk}><CheckCircle2 size={13}/> À jour</span>
+                              : <span className={styles.statutOk}><CheckCircle2 size={13}/> Trouvé</span>}
                     </td>
                     <td>
-                      {aSupprimer(ref) ? (
+                      {refsInfo[ref]?.supprime ? (
+                        <span className={styles.muted}>—</span>
+                      ) : aSupprimer(ref) ? (
                         <button className={styles.btnSupp}
                           onClick={() => supprimer(ref)}
                           disabled={busy || busyRefs[ref]}
