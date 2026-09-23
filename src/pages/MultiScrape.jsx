@@ -128,6 +128,7 @@ export default function MultiScrape() {
   const [pleinEcran, setPleinEcran] = useState(false)
   const [manuels, setManuels] = useState({})
   const [saved, setSaved] = useState({})
+  const [jaunes, setJaunes] = useState({})
 
   const [elapsed, setElapsed] = useState(0)
   const startedAt = useRef(null)
@@ -147,6 +148,8 @@ export default function MultiScrape() {
   const manuel = (ref, field) => (manuels[ref] || {})[field] || ''
   const setManuel = useCallback((ref, field, v) =>
     setManuels(m => ({ ...m, [ref]: { ...(m[ref] || {}), [field]: v } })), [])
+  const toggleJaune = useCallback((ref) =>
+    setJaunes(m => ({ ...m, [ref]: !m[ref] })), [])
 
   const savedConc = (ref) => (saved[ref] || {}).conc || ''
   const savedEco = (ref) => {
@@ -251,10 +254,10 @@ export default function MultiScrape() {
     try {
       localStorage.setItem(SESSION_KEY, JSON.stringify({
         jobId, status, fait, total, current, elapsed, jobMsg,
-        refsSel, sitesActifs, filtre, manuels, saved, savedAt: Date.now(),
+        refsSel, sitesActifs, filtre, manuels, saved, jaunes, savedAt: Date.now(),
       }))
     } catch { /* stockage local indisponible */ }
-  }, [jobId, status, fait, total, current, elapsed, jobMsg, refsSel, sitesActifs, filtre, manuels, saved])
+  }, [jobId, status, fait, total, current, elapsed, jobMsg, refsSel, sitesActifs, filtre, manuels, saved, jaunes])
 
   useEffect(() => { enregistrerSession() }, [enregistrerSession])
 
@@ -275,6 +278,7 @@ export default function MultiScrape() {
           if (saved.filtre) setFiltre(saved.filtre)
           if (saved.manuels) setManuels(saved.manuels)
           if (saved.saved) setSaved(saved.saved)
+          if (saved.jaunes) setJaunes(saved.jaunes)
           if (saved.sitesActifs) setSitesActifs(saved.sitesActifs)
           setSessionExiste(true)
           setJobId(saved.jobId)
@@ -396,7 +400,7 @@ export default function MultiScrape() {
     setJobId(null); setStatus('idle'); setFait(0); setTotal(0)
     setCurrent(null); setResults({}); setRefsInfo({}); setJobMsg('')
     setConc1Map({}); setDispoMap({}); setDoneRefs([]); setElapsed(0)
-    setSaved({}); setSessionExiste(false)
+    setSaved({}); setJaunes({}); setSessionExiste(false)
     try { localStorage.removeItem(SESSION_KEY) } catch { /* stockage local indisponible */ }
   }
 
@@ -963,6 +967,7 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
           <div className={styles.tableScroll}>
           <table className={styles.table}>
             <colgroup>
+              <col className={styles.colMarque}/>
               <col className={styles.colNum}/>
               <col className={styles.colRef}/>
               <col className={styles.colEan}/>
@@ -981,6 +986,7 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
             </colgroup>
             <thead>
               <tr>
+                <th className={styles.colMarque} title="Cocher pour marquer la ligne en vert (reste tant que non décochée)">✓</th>
                 <th>#</th>
                 <th>Réf.</th>
                 <th>EAN13</th>
@@ -1023,7 +1029,16 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
                   ? Math.round((minAll + fraisUsed + (isNaN(parseFloat(ecoUsed)) ? 0 : parseFloat(ecoUsed))) * 1.2 / 0.98 * 100) / 100
                   : 0
                 return (
-                  <tr key={ref} className={`${intra ? styles.rowIntrouvable : ''} ${estNouveau ? styles.rowVert : ''}`}>
+                  <tr key={ref} className={`${intra ? styles.rowIntrouvable : ''} ${estNouveau ? styles.rowVert : ''} ${jaunes[ref] ? styles.rowMarque : ''}`}>
+                    <td className={styles.colMarque} onClick={e => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        className={styles.checkMarque}
+                        checked={!!jaunes[ref]}
+                        onChange={() => toggleJaune(ref)}
+                        title="Marquer en vert / dé-marquer"
+                      />
+                    </td>
                     <td className={styles.num}>{i + 1}</td>
                     <td>
                       <code className={styles.ref}>{ref}</code>

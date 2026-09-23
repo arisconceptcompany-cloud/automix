@@ -289,6 +289,14 @@
 
 .rowIntrouvable td { opacity: .75; }
 .rowVert td { background: #dcfce722 !important; }
+.rowMarque td { background: #86efac44 !important; color: #111827; }
+.rowMarque td .ref { color: var(--accent2); }
+.rowMarque td .miniExcel { color: var(--success); }
+.rowMarque td .statutSupp { color: var(--danger); }
+.rowMarque td .statutIntra { color: var(--text2); }
+
+.colMarque { width: 26px; min-width: 26px; text-align: center; }
+.checkMarque { width: 15px; height: 15px; accent-color: #22c55e; cursor: pointer; vertical-align: middle; }
 
 .num { color: var(--text2); font-size: 11px; width: 32px; text-align: center; }
 .ref { font-family: monospace; font-size: 11px; background: var(--bg3); padding: 2px 7px; border-radius: 5px; color: var(--accent2); display: inline-block; }
