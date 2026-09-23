@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback, memo } from 'react'
 import {
   Rocket, Search, RefreshCw, Trash2, CheckCircle2, XCircle,
   NotebookPen, Loader, CheckSquare, Square, ListFilter,
@@ -56,6 +56,54 @@ const setCle = (o, key, value) => {
   return out
 }
 
+const SaisieChamp = memo(function SaisieChamp({
+  onCommit, ligne, field, value, placeholder, title, inputMode, className, extraStyle,
+}) {
+  const [txt, setTxt] = useState(value ?? '')
+  const premier = useRef(true)
+  const derniereValeur = useRef(value ?? '')
+
+  useEffect(() => {
+    if (premier.current) { premier.current = false; return }
+    if (value === derniereValeur.current) return
+    derniereValeur.current = value ?? ''
+    setTxt(value ?? '')
+  }, [value])
+
+  useEffect(() => {
+    if (premier.current) return
+    if (txt === derniereValeur.current) return
+    const t = setTimeout(() => {
+      derniereValeur.current = txt
+      onCommit(ligne, field, txt)
+    }, 350)
+    return () => clearTimeout(t)
+  }, [txt, onCommit, ligne, field])
+
+  return (
+    <input
+      className={className}
+      inputMode={inputMode}
+      style={extraStyle}
+      placeholder={placeholder}
+      title={title}
+      value={txt}
+      onChange={e => setTxt(e.target.value)}
+      onClick={e => e.stopPropagation()}
+      onBlur={() => {
+        derniereValeur.current = txt
+        onCommit(ligne, field, txt)
+      }}
+      onKeyDown={e => {
+        if (e.key === 'Enter') {
+          derniereValeur.current = txt
+          onCommit(ligne, field, txt)
+        }
+      }}
+    />
+  )
+})
+
 export default function MultiScrape() {
   const [produits, setProduits] = useState([])
   const [refsSel, setRefsSel] = useState([])
@@ -97,8 +145,8 @@ export default function MultiScrape() {
   }
 
   const manuel = (ref, field) => (manuels[ref] || {})[field] || ''
-  const setManuel = (ref, field, v) =>
-    setManuels(m => ({ ...m, [ref]: { ...(m[ref] || {}), [field]: v } }))
+  const setManuel = useCallback((ref, field, v) =>
+    setManuels(m => ({ ...m, [ref]: { ...(m[ref] || {}), [field]: v } })), [])
 
   const savedConc = (ref) => (saved[ref] || {}).conc || ''
   const savedEco = (ref) => {
@@ -129,13 +177,6 @@ export default function MultiScrape() {
     if (ex !== '') return ex
     const c1 = conc1Map[ref]
     return c1 && c1.prix != null ? `${c1.prix}${c1.vendeur ? ' ' + c1.vendeur : ''}` : ''
-  }
-
-  const splitConcTexte = (t) => {
-    const s = String(t ?? '').trim()
-    const mt = s.match(/^(-?\d+(?:[.,]\d+)?)\s*(.*)$/)
-    if (!mt) return { prix: null, vendeur: '' }
-    return { prix: parseFloat(mt[1].replace(',', '.')), vendeur: mt[2].trim() }
   }
 
   const refsExcelMap = useMemo(() => {
@@ -981,7 +1022,6 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
                 const miniLive = minAll != null
                   ? Math.round((minAll + fraisUsed + (isNaN(parseFloat(ecoUsed)) ? 0 : parseFloat(ecoUsed))) * 1.2 / 0.98 * 100) / 100
                   : 0
-                const fraisManuel = String((manuels[ref] || {}).frais || '').trim()
                 return (
                   <tr key={ref} className={`${intra ? styles.rowIntrouvable : ''} ${estNouveau ? styles.rowVert : ''}`}>
                     <td className={styles.num}>{i + 1}</td>
@@ -1045,12 +1085,13 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
                         }
                         return (
                           <div className={styles.conc} title={tip.join(' · ') || undefined}>
-                            <input
+                            <SaisieChamp
+                              onCommit={setManuel}
+                              ligne={ref}
+                              field="conc1"
                               className={`${styles.saisie} ${styles.saisieConc}`}
                               placeholder="Prix + marchand (ex : 311 Ubaldi)…"
                               value={texteConc}
-                              onChange={e => setManuel(ref, 'conc1', e.target.value)}
-                              onClick={e => e.stopPropagation()}
                             />
                           </div>
                         )
@@ -1086,14 +1127,15 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
                       />
                     </td>
                     <td className={styles.fraisCell}>
-                      <input
+                      <SaisieChamp
+                        onCommit={setManuel}
+                        ligne={ref}
+                        field="frais"
                         className={styles.saisie}
                         inputMode="decimal"
-                        style={{ width: 52 }}
-                        value={fraisManuel !== '' ? fraisManuel : String(fraisUsed)}
+                        extraStyle={{ width: 52 }}
+                        value={String(fraisUsed)}
                         title={`Frais utilisé pour le calcul du mini : ${fraisUsed} € (modifiable — recalcul au clic sur Appliquer)`}
-                        onChange={e => setManuel(ref, 'frais', e.target.value)}
-                        onClick={e => e.stopPropagation()}
                       />
                     </td>
                     <td>
