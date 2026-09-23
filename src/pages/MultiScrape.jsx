@@ -18,6 +18,11 @@ const num = (v) => {
   return isNaN(n) ? null : n
 }
 
+const prixDepuisTexte = (t) => {
+  const m = String(t ?? '').match(/-?\d+([.,]\d+)?/)
+  return m ? parseFloat(m[0].replace(',', '.')) : null
+}
+
 const repair = (s) => {
   try {
     const bytes = new Uint8Array([...s].map(ch => ch.charCodeAt(0) & 0xFF))
@@ -429,18 +434,18 @@ export default function MultiScrape() {
   const appliquer = async (ref, silencieux = false) => {
     const sites = payloadSites(ref)
     const m = manuels[ref] || {}
-    const conc1Auto = conc1Map[ref]?.prix ?? null
-    const conc1Manuel = (m.conc1 || '').trim()
-    const ecoVal = ecoUtilise(ref)
-    if (Object.keys(sites).length === 0 && !aManuels(ref) && conc1Auto == null && !conc1Manuel && ecoVal == null) return
-    if (!silencieux) setBusyRefs(prev => ({ ...prev, [ref]: true }))
-    try {
-      const base = {
-        reference: ref,
-        nom: (m.nom || '').trim() || (results[ref] || {}).cedi?.nom || '',
-        sites,
-        disponibilite: dispoMap[ref] || undefined,
-        conc1: conc1Auto != null ? conc1Auto : (conc1Manuel || undefined),
+const conc1Auto = conc1Map[ref]?.prix ?? null
+      const conc1Manuel = (m.conc1 || '').trim()
+      const ecoVal = ecoUtilise(ref)
+      if (Object.keys(sites).length === 0 && !aManuels(ref) && conc1Auto == null && !conc1Manuel && ecoVal == null) return
+      if (!silencieux) setBusyRefs(prev => ({ ...prev, [ref]: true }))
+      try {
+        const base = {
+          reference: ref,
+          nom: (m.nom || '').trim() || (results[ref] || {}).cedi?.nom || '',
+          sites,
+          disponibilite: dispoMap[ref] || undefined,
+          conc1: conc1Manuel !== '' ? conc1Manuel : (conc1Auto != null ? conc1Auto : undefined),
         ean13: (m.ean13 || '').trim() || undefined,
         famille: (m.famille || '').trim() || undefined,
         sous_famille: (m.sous_famille || '').trim() || undefined,
@@ -629,13 +634,13 @@ export default function MultiScrape() {
   }
 
   const conc1PrixDe = (ref) => {
+    const m = manuel(ref, 'conc1').trim()
+    if (m !== '') {
+      const n = prixDepuisTexte(m)
+      if (n != null && !isNaN(n)) return n
+    }
     const auto = conc1Map[ref]?.prix
     if (auto != null && !isNaN(parseFloat(auto))) return parseFloat(auto)
-    const m = String((manuels[ref] || {}).conc1 || '').trim()
-    if (m !== '') {
-      const n = parseFloat(m)
-      if (!isNaN(n)) return n
-    }
     return null
   }
 
@@ -957,26 +962,24 @@ export default function MultiScrape() {
                     <td className={styles.concCell}>
                       {(() => {
                         const c1 = conc1De(ref)
-                        if (c1 && c1.prix != null) {
-                          const tip = []
+                        const manuelV = manuel(ref, 'conc1')
+                        const autoTxt = c1 && c1.prix != null
+                          ? `${c1.prix}${c1.vendeur ? ' ' + c1.vendeur : ''}`
+                          : ''
+                        const tip = []
+                        if (c1) {
                           if (c1.nom) tip.push(c1.nom)
-                          if (c1.vendeur) tip.push('Vendeur : ' + c1.vendeur)
                           if (c1.url) tip.push(c1.url)
-                          return (
-                            <span className={styles.conc} title={tip.join(' · ')}>
-                              <span className={styles.concPrix}>{c1.prix.toFixed(2)} €</span>
-                              {c1.vendeur && <span className={styles.concVendeur}>{c1.vendeur}</span>}
-                            </span>
-                          )
                         }
                         return (
-                          <div>
-                            {c1?.introuvable ? <span className={styles.muted}>-</span> : <span className={styles.badgeGris}>—</span>}
-                            {conc1De(ref)?.prix == null && (
-                              <input className={`${styles.saisie} ${styles.saisiePrix}`} placeholder="Prix manuel €…"
-                                value={manuel(ref, 'conc1')}
-                                onChange={e => setManuel(ref, 'conc1', e.target.value)} />
-                            )}
+                          <div className={styles.conc} title={tip.join(' · ') || undefined}>
+                            <input
+                              className={`${styles.saisie} ${styles.saisieConc}`}
+                              placeholder="Prix + marchand (ex : 311 Ubaldi)…"
+                              value={manuelV !== '' ? manuelV : autoTxt}
+                              onChange={e => setManuel(ref, 'conc1', e.target.value)}
+                              onClick={e => e.stopPropagation()}
+                            />
                           </div>
                         )
                       })()}

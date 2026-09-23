@@ -279,7 +279,7 @@
 .colNom      { width: auto; min-width: 180px; }
 .colPrixExcel { width: 140px; min-width: 115px; }
 .colPrixSite { width: 95px; min-width: 85px; }
-.colConc     { width: 100px; min-width: 90px; }
+.colConc     { width: 180px; min-width: 160px; }
 .colDispo    { width: 230px; min-width: 200px; }
 .colEco      { width: 110px; min-width: 95px; }
 .colFrais    { width: 85px; min-width: 75px; }
@@ -343,6 +343,7 @@
 .saisie:focus { border-color: #a855f7; box-shadow: 0 0 0 2px rgba(167, 85, 247, .25); }
 .saisie::placeholder { color: var(--text2); opacity: .7; }
 .saisiePrix { min-width: 84px; width: 84px; font-weight: 700; display: block; }
+.saisieConc { min-width: 150px; width: 150px; font-weight: 600; display: block; }
 
 /* ── Disponibilité (par fournisseur) ────────────────────── */
 .dispoCell { vertical-align: middle; }
