@@ -107,6 +107,12 @@ export default function MultiScrape() {
     return !isNaN(n) ? n : null
   }
 
+  const savedFrais = (ref) => {
+    const v = (saved[ref] || {}).frais
+    const n = parseFloat(v)
+    return !isNaN(n) ? n : null
+  }
+
   const splitConcTexte = (t) => {
     const s = String(t ?? '').trim()
     const mt = s.match(/^(-?\d+(?:[.,]\d+)?)\s*(.*)$/)
@@ -455,6 +461,7 @@ export default function MultiScrape() {
     const m = manuels[ref] || {}
 const conc1Auto = conc1Map[ref]?.prix ?? null
       const conc1Manuel = (m.conc1 || '').trim()
+      const svConc = savedConc(ref)
       const ecoVal = ecoUtilise(ref)
       if (Object.keys(sites).length === 0 && !aManuels(ref) && conc1Auto == null && !conc1Manuel && ecoVal == null) return
       if (!silencieux) setBusyRefs(prev => ({ ...prev, [ref]: true }))
@@ -464,7 +471,7 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
           nom: (m.nom || '').trim() || (results[ref] || {}).cedi?.nom || '',
           sites,
           disponibilite: dispoMap[ref] || undefined,
-          conc1: conc1Manuel !== '' ? conc1Manuel : (conc1Auto != null ? conc1Auto : undefined),
+          conc1: conc1Manuel !== '' ? conc1Manuel : (svConc !== '' ? svConc : (conc1Auto != null ? conc1Auto : undefined)),
         ean13: (m.ean13 || '').trim() || undefined,
         famille: (m.famille || '').trim() || undefined,
         sous_famille: (m.sous_famille || '').trim() || undefined,
@@ -500,8 +507,9 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
         setSaved(prev => ({
           ...prev,
           [ref]: {
-            conc: conc1Manuel !== '' ? conc1Manuel : (conc1Auto != null ? String(conc1Auto) : ''),
+            conc: conc1Manuel !== '' ? conc1Manuel : (svConc !== '' ? svConc : (conc1Auto != null ? String(conc1Auto) : '')),
             eco: ecoVal != null ? ecoVal : (prev[ref]?.eco ?? null),
+            frais: fraisNum != null ? fraisNum : (prev[ref]?.frais ?? null),
           },
         }))
         viderManuels(ref)
@@ -511,8 +519,9 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
         setSaved(prev => ({
           ...prev,
           [ref]: {
-            conc: conc1Manuel !== '' ? conc1Manuel : (conc1Auto != null ? String(conc1Auto) : ''),
+            conc: conc1Manuel !== '' ? conc1Manuel : (svConc !== '' ? svConc : (conc1Auto != null ? String(conc1Auto) : '')),
             eco: ecoVal != null ? ecoVal : (prev[ref]?.eco ?? null),
+            frais: fraisNum != null ? fraisNum : (prev[ref]?.frais ?? null),
           },
         }))
         viderManuels(ref)
@@ -637,6 +646,8 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
       const n = parseFloat(v)
       if (!isNaN(n)) return n
     }
+    const sv = savedFrais(ref)
+    if (sv != null) return sv
     const p = refsExcelMap.get(norm(ref))
     if (p) {
       const t = trancheFrais(p)
