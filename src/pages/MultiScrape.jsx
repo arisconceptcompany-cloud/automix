@@ -79,6 +79,7 @@ export default function MultiScrape() {
   const [busyRefs, setBusyRefs] = useState({})
   const [pleinEcran, setPleinEcran] = useState(false)
   const [manuels, setManuels] = useState({})
+  const [saved, setSaved] = useState({})
 
   const [elapsed, setElapsed] = useState(0)
   const startedAt = useRef(null)
@@ -98,6 +99,20 @@ export default function MultiScrape() {
   const manuel = (ref, field) => (manuels[ref] || {})[field] || ''
   const setManuel = (ref, field, v) =>
     setManuels(m => ({ ...m, [ref]: { ...(m[ref] || {}), [field]: v } }))
+
+  const savedConc = (ref) => (saved[ref] || {}).conc || ''
+  const savedEco = (ref) => {
+    const v = (saved[ref] || {}).eco
+    const n = parseFloat(v)
+    return !isNaN(n) ? n : null
+  }
+
+  const splitConcTexte = (t) => {
+    const s = String(t ?? '').trim()
+    const mt = s.match(/^(-?\d+(?:[.,]\d+)?)\s*(.*)$/)
+    if (!mt) return { prix: null, vendeur: '' }
+    return { prix: parseFloat(mt[1].replace(',', '.')), vendeur: mt[2].trim() }
+  }
 
   const refsExcelMap = useMemo(() => {
     const m = new Map()
@@ -171,10 +186,10 @@ export default function MultiScrape() {
     try {
       localStorage.setItem(SESSION_KEY, JSON.stringify({
         jobId, status, fait, total, current, elapsed, jobMsg,
-        refsSel, sitesActifs, filtre, manuels, savedAt: Date.now(),
+        refsSel, sitesActifs, filtre, manuels, saved, savedAt: Date.now(),
       }))
     } catch { /* stockage local indisponible */ }
-  }, [jobId, status, fait, total, current, elapsed, jobMsg, refsSel, sitesActifs, filtre, manuels])
+  }, [jobId, status, fait, total, current, elapsed, jobMsg, refsSel, sitesActifs, filtre, manuels, saved])
 
   useEffect(() => { enregistrerSession() }, [enregistrerSession])
 
@@ -194,6 +209,7 @@ export default function MultiScrape() {
           const d = r.data
           if (saved.filtre) setFiltre(saved.filtre)
           if (saved.manuels) setManuels(saved.manuels)
+          if (saved.saved) setSaved(saved.saved)
           if (saved.sitesActifs) setSitesActifs(saved.sitesActifs)
           setSessionExiste(true)
           setJobId(saved.jobId)
@@ -287,6 +303,7 @@ export default function MultiScrape() {
     const sites = SITES.filter(s => sitesActifs[s])
     setMsg(null); setJobMsg(''); setResults({}); setRefsInfo({})
     setConc1Map({}); setDispoMap({}); setDoneRefs([])
+    setSaved({})
     setFait(0); setTotal(references.length); setCurrent(null)
     setStatus('running')
     startedAt.current = Date.now()
@@ -315,7 +332,7 @@ export default function MultiScrape() {
     setJobId(null); setStatus('idle'); setFait(0); setTotal(0)
     setCurrent(null); setResults({}); setRefsInfo({}); setJobMsg('')
     setConc1Map({}); setDispoMap({}); setDoneRefs([]); setElapsed(0)
-    setSessionExiste(false)
+    setSaved({}); setSessionExiste(false)
     try { localStorage.removeItem(SESSION_KEY) } catch { /* stockage local indisponible */ }
   }
 
@@ -373,6 +390,8 @@ export default function MultiScrape() {
       const n = parseFloat(v)
       if (!isNaN(n)) return n
     }
+    const sv = savedEco(ref)
+    if (sv != null) return sv
     const site = ecoPart(ref)
     if (site != null) return site
     return ecoDe(refsExcelMap.get(norm(ref)))
@@ -478,10 +497,24 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
           return upd
         }))
         setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), maj: true, dans_excel: true } }))
+        setSaved(prev => ({
+          ...prev,
+          [ref]: {
+            conc: conc1Manuel !== '' ? conc1Manuel : (conc1Auto != null ? String(conc1Auto) : ''),
+            eco: ecoVal != null ? ecoVal : (prev[ref]?.eco ?? null),
+          },
+        }))
         viderManuels(ref)
         pushToast(ref, 'mis à jour')
       } else if (dataMaj.ajout > 0) {
         setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), dans_excel: true, maj: true } }))
+        setSaved(prev => ({
+          ...prev,
+          [ref]: {
+            conc: conc1Manuel !== '' ? conc1Manuel : (conc1Auto != null ? String(conc1Auto) : ''),
+            eco: ecoVal != null ? ecoVal : (prev[ref]?.eco ?? null),
+          },
+        }))
         viderManuels(ref)
         pushToast(ref, 'ajouté')
       }
@@ -637,6 +670,11 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
     const m = manuel(ref, 'conc1').trim()
     if (m !== '') {
       const n = prixDepuisTexte(m)
+      if (n != null && !isNaN(n)) return n
+    }
+    const sv = savedConc(ref)
+    if (sv !== '') {
+      const n = prixDepuisTexte(sv)
       if (n != null && !isNaN(n)) return n
     }
     const auto = conc1Map[ref]?.prix
@@ -902,7 +940,7 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
                 const ecoDefaut = ecoPart(ref) ?? ecoExcel
                 const ecoUsed = ecoManuel !== '' && !isNaN(parseFloat(ecoManuel))
                   ? parseFloat(ecoManuel)
-                  : (ecoDefaut ?? 0)
+                  : (savedEco(ref) ?? ecoDefaut ?? 0)
                 const miniLive = minAll != null
                   ? Math.round((minAll + fraisUsed + (isNaN(parseFloat(ecoUsed)) ? 0 : parseFloat(ecoUsed))) * 1.2 / 0.98 * 100) / 100
                   : 0
@@ -963,6 +1001,7 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
                       {(() => {
                         const c1 = conc1De(ref)
                         const manuelV = manuel(ref, 'conc1')
+                        const svConc = savedConc(ref)
                         const autoTxt = c1 && c1.prix != null
                           ? `${c1.prix}${c1.vendeur ? ' ' + c1.vendeur : ''}`
                           : ''
@@ -976,7 +1015,7 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
                             <input
                               className={`${styles.saisie} ${styles.saisieConc}`}
                               placeholder="Prix + marchand (ex : 311 Ubaldi)…"
-                              value={manuelV !== '' ? manuelV : autoTxt}
+                              value={manuelV !== '' ? manuelV : (svConc !== '' ? svConc : autoTxt)}
                               onChange={e => setManuel(ref, 'conc1', e.target.value)}
                               onClick={e => e.stopPropagation()}
                             />
@@ -1002,7 +1041,7 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
                         className={styles.saisie}
                         inputMode="decimal"
                         style={{ width: 64, color: ecoManuel !== '' ? 'var(--text)' : (ecoPart(ref) != null ? '#f97316' : '#22c55e'), fontWeight: 700 }}
-                        value={ecoManuel !== '' ? ecoManuel : (ecoDefaut != null ? String(ecoDefaut) : '')}
+                        value={ecoManuel !== '' ? ecoManuel : (savedEco(ref) != null ? String(savedEco(ref)) : (ecoDefaut != null ? String(ecoDefaut) : ''))}
                         placeholder="Eco…"
                         title={
                           ecoExcel != null && ecoPart(ref) != null && Math.abs(ecoExcel - ecoPart(ref)) > 0.001
