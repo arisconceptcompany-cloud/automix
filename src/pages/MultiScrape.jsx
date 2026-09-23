@@ -113,6 +113,24 @@ export default function MultiScrape() {
     return !isNaN(n) ? n : null
   }
 
+  const conc1Excel = (ref) => {
+    const p = refsExcelMap.get(norm(ref))
+    if (!p) return ''
+    const v = val(p, ['conc1'])
+    return v != null ? String(v).trim() : ''
+  }
+
+  const conc1Texte = (ref) => {
+    const m = manuel(ref, 'conc1').trim()
+    if (m !== '') return m
+    const sv = savedConc(ref)
+    if (sv !== '') return sv
+    const ex = conc1Excel(ref)
+    if (ex !== '') return ex
+    const c1 = conc1Map[ref]
+    return c1 && c1.prix != null ? `${c1.prix}${c1.vendeur ? ' ' + c1.vendeur : ''}` : ''
+  }
+
   const splitConcTexte = (t) => {
     const s = String(t ?? '').trim()
     const mt = s.match(/^(-?\d+(?:[.,]\d+)?)\s*(.*)$/)
@@ -309,7 +327,6 @@ export default function MultiScrape() {
     const sites = SITES.filter(s => sitesActifs[s])
     setMsg(null); setJobMsg(''); setResults({}); setRefsInfo({})
     setConc1Map({}); setDispoMap({}); setDoneRefs([])
-    setSaved({})
     setFait(0); setTotal(references.length); setCurrent(null)
     setStatus('running')
     startedAt.current = Date.now()
@@ -461,7 +478,7 @@ export default function MultiScrape() {
     const m = manuels[ref] || {}
 const conc1Auto = conc1Map[ref]?.prix ?? null
       const conc1Manuel = (m.conc1 || '').trim()
-      const svConc = savedConc(ref)
+      const concApplied = conc1Texte(ref)
       const ecoVal = ecoUtilise(ref)
       if (Object.keys(sites).length === 0 && !aManuels(ref) && conc1Auto == null && !conc1Manuel && ecoVal == null) return
       if (!silencieux) setBusyRefs(prev => ({ ...prev, [ref]: true }))
@@ -471,7 +488,7 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
           nom: (m.nom || '').trim() || (results[ref] || {}).cedi?.nom || '',
           sites,
           disponibilite: dispoMap[ref] || undefined,
-          conc1: conc1Manuel !== '' ? conc1Manuel : (svConc !== '' ? svConc : (conc1Auto != null ? conc1Auto : undefined)),
+          conc1: concApplied !== '' ? concApplied : undefined,
         ean13: (m.ean13 || '').trim() || undefined,
         famille: (m.famille || '').trim() || undefined,
         sous_famille: (m.sous_famille || '').trim() || undefined,
@@ -501,13 +518,15 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
           }
           const np = num(dataMaj.eco_part != null ? dataMaj.eco_part : ecoVal)
           if (np != null) upd = setCle(upd, 'EP TTC', np)
+          if (concApplied !== '') upd = setCle(upd, 'CONC1', concApplied)
+          if (fraisNum != null) upd = setCle(upd, 'Frais', fraisNum)
           return upd
         }))
         setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), maj: true, dans_excel: true } }))
         setSaved(prev => ({
           ...prev,
           [ref]: {
-            conc: conc1Manuel !== '' ? conc1Manuel : (svConc !== '' ? svConc : (conc1Auto != null ? String(conc1Auto) : '')),
+            conc: concApplied,
             eco: ecoVal != null ? ecoVal : (prev[ref]?.eco ?? null),
             frais: fraisNum != null ? fraisNum : (prev[ref]?.frais ?? null),
           },
@@ -519,7 +538,7 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
         setSaved(prev => ({
           ...prev,
           [ref]: {
-            conc: conc1Manuel !== '' ? conc1Manuel : (svConc !== '' ? svConc : (conc1Auto != null ? String(conc1Auto) : '')),
+            conc: concApplied,
             eco: ecoVal != null ? ecoVal : (prev[ref]?.eco ?? null),
             frais: fraisNum != null ? fraisNum : (prev[ref]?.frais ?? null),
           },
@@ -650,6 +669,11 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
     if (sv != null) return sv
     const p = refsExcelMap.get(norm(ref))
     if (p) {
+      const f = val(p, ['frais'])
+      if (f != null) {
+        const n = parseFloat(String(f).replace(',', '.'))
+        if (!isNaN(n)) return n
+      }
       const t = trancheFrais(p)
       if (t != null) return t
     }
@@ -688,6 +712,8 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
       const n = prixDepuisTexte(sv)
       if (n != null && !isNaN(n)) return n
     }
+    const ex = prixDepuisTexte(conc1Excel(ref))
+    if (ex != null && !isNaN(ex)) return ex
     const auto = conc1Map[ref]?.prix
     if (auto != null && !isNaN(parseFloat(auto))) return parseFloat(auto)
     return null
@@ -1011,11 +1037,7 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
                     <td className={styles.concCell}>
                       {(() => {
                         const c1 = conc1De(ref)
-                        const manuelV = manuel(ref, 'conc1')
-                        const svConc = savedConc(ref)
-                        const autoTxt = c1 && c1.prix != null
-                          ? `${c1.prix}${c1.vendeur ? ' ' + c1.vendeur : ''}`
-                          : ''
+                        const texteConc = conc1Texte(ref)
                         const tip = []
                         if (c1) {
                           if (c1.nom) tip.push(c1.nom)
@@ -1026,7 +1048,7 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
                             <input
                               className={`${styles.saisie} ${styles.saisieConc}`}
                               placeholder="Prix + marchand (ex : 311 Ubaldi)…"
-                              value={manuelV !== '' ? manuelV : (svConc !== '' ? svConc : autoTxt)}
+                              value={texteConc}
                               onChange={e => setManuel(ref, 'conc1', e.target.value)}
                               onClick={e => e.stopPropagation()}
                             />
