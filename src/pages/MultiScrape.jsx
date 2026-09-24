@@ -1078,8 +1078,7 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
                     </td>
                     {SITES.map(s => {
                       const r = (results[ref] || {})[s]
-                      if (!r) return <td key={s} className={styles.muted}>-</td>
-                      if (r.introuvable) return <td key={s} className={styles.muted}>-</td>
+                      if (!r || r.introuvable || r.prix == null) return <td key={s} className={styles.muted}>-</td>
                       const v = parseFloat(r.prix)
                       return (
                         <td key={s}>
