@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { AuthProvider, useAuth } from './AuthContext'
 import Sidebar     from './components/Sidebar'
 import ProgressBar from './components/ProgressBar'
+import ThemeToggle from './components/ThemeToggle'
 import Excel       from './pages/Excel'
 import MultiScrape from './pages/MultiScrape'
 import Explorateur from './pages/Explorateur'
@@ -71,6 +72,7 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <AppLayout />
+        <ThemeToggle />
       </AuthProvider>
     </BrowserRouter>
   )

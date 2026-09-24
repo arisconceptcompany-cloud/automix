@@ -1,0 +1,18 @@
+.toggle {
+  display: flex; align-items: center; justify-content: center;
+  position: fixed; top: 12px; right: 14px;
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  color: var(--accent2);
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .18);
+  z-index: 500;
+  transition: all .15s;
+}
+.toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-1px);
+}

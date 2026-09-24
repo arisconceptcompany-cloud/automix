@@ -1,6 +1,6 @@
 .page {
   min-height: 100vh;
-  background: radial-gradient(ellipse at 30% 20%, #1a1d2e 0%, #0f1117 70%);
+  background: var(--bg);
   display: flex; align-items: center; justify-content: center;
 }
 
@@ -12,7 +12,7 @@
 .card {
   background: var(--bg2); border-radius: 16px;
   padding: 2.5rem; width: 100%; max-width: 420px;
-  box-shadow: 0 8px 40px rgba(0,0,0,.4);
+  box-shadow: var(--card-shadow);
 }
 
 .cardHeader {
