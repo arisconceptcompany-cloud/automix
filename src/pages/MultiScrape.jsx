@@ -12,6 +12,10 @@ const SITES = ['cedi', 'findis', 'gpdis', 'sogam']
 const SITE_LABEL = { cedi: 'CEDI', findis: 'FINDIS', gpdis: 'GPDIS', sogam: 'SOGAM' }
 const SITE_EXCEL_KEY = { cedi: 'cedi', findis: 'findis', gpdis: 'gpdis', sogam: 'sogam' }
 const SESSION_KEY = 'multiscrape_session_v1'
+/** Marqueur d'un champ volontairement effacé : distingue "rien saisi" de "prix abandonné". */
+const EFFACE = '__absent__'
+/** Valeur écrite dans la colonne Conc 1 de l'Excel quand le prix concurrent est abandonné. */
+const CONC1_ABSENT = 'Introuvable'
 
 const num = (v) => {
   const n = parseFloat(v)
@@ -151,7 +155,6 @@ export default function MultiScrape() {
   const toggleJaune = useCallback((ref) =>
     setJaunes(m => ({ ...m, [ref]: !m[ref] })), [])
 
-  const savedConc = (ref) => (saved[ref] || {}).conc || ''
   const savedEco = (ref) => {
     const v = (saved[ref] || {}).eco
     const n = parseFloat(v)
@@ -171,15 +174,45 @@ export default function MultiScrape() {
     return v != null ? String(v).trim() : ''
   }
 
+  /** Conc 1 volontairement abandonné : le prix concurrent scrapé ne doit pas réapparaître. */
+  const conc1Efface = (ref) => {
+    const m = manuel(ref, 'conc1')
+    if (m === EFFACE) return true
+    if (String(m || '').trim() !== '') return false
+    return (saved[ref] || {}).conc === null
+  }
+
   const conc1Texte = (ref) => {
-    const m = manuel(ref, 'conc1').trim()
-    if (m !== '') return m
-    const sv = savedConc(ref)
-    if (sv !== '') return sv
+    const m = manuel(ref, 'conc1')
+    if (m === EFFACE) return ''
+    if (String(m || '').trim() !== '') return m
+    const s = (saved[ref] || {}).conc
+    if (s === null) return ''
+    if (String(s || '').trim() !== '') return String(s)
     const ex = conc1Excel(ref)
     if (ex !== '') return ex
     const c1 = conc1Map[ref]
     return c1 && c1.prix != null ? `${c1.prix}${c1.vendeur ? ' ' + c1.vendeur : ''}` : ''
+  }
+
+  const titreConc = (ref) => {
+    const parts = []
+    if (conc1Efface(ref)) {
+      parts.push('Prix concurrent abandonné — le résultat scrapé est ignoré')
+      const c1 = conc1Map[ref]
+      if (c1 && c1.prix != null) {
+        parts.push(`Scrapé ignoré : ${c1.prix}${c1.vendeur ? ' ' + c1.vendeur : ''}`)
+      }
+      parts.push('Saisir une valeur pour rétablir le prix concurrent')
+    } else {
+      parts.push('Prix + marchand — modifiable')
+      const c1 = conc1Map[ref]
+      if (c1) {
+        if (c1.nom) parts.push(c1.nom)
+        if (c1.url) parts.push(c1.url)
+      }
+    }
+    return parts.join('\n')
   }
 
   const refsExcelMap = useMemo(() => {
@@ -422,15 +455,88 @@ export default function MultiScrape() {
     })
   }
 
+  /** Prix effectif d'un site. Un prix effacé (produit retiré du site) ne retombe jamais sur le scrape. */
+  const prixSite = (ref, site) => {
+    const m = manuel(ref, 'prix_' + site)
+    if (m === EFFACE) return null
+    const t = String(m || '').trim()
+    if (t !== '') {
+      const n = parseFloat(t.replace(',', '.'))
+      if (!isNaN(n)) return n
+    }
+    const sv = saved[ref]?.prix
+    if (sv && Object.prototype.hasOwnProperty.call(sv, site)) {
+      if (sv[site] === null) return null
+      const n = parseFloat(sv[site])
+      if (!isNaN(n)) return n
+    }
+    const r = (results[ref] || {})[site]
+    if (r && !r.introuvable && r.prix != null) {
+      const n = parseFloat(r.prix)
+      if (!isNaN(n)) return n
+    }
+    return null
+  }
+
+  /** Le prix de ce site a été effacé volontairement (saisie en cours ou dernier apply). */
+  const prixSiteEfface = (ref, site) => {
+    const m = manuel(ref, 'prix_' + site)
+    if (m === EFFACE) return true
+    if (String(m || '').trim() !== '') return false
+    return saved[ref]?.prix?.[site] === null
+  }
+
+  const prixSiteCorrige = (ref, site) => {
+    const m = manuel(ref, 'prix_' + site)
+    return m !== EFFACE && String(m || '').trim() !== ''
+  }
+
+  /** Contenu affiché dans le champ : saisie brute, sinon prix effectif formaté. */
+  const saisiePrix = (ref, site) => {
+    const m = manuel(ref, 'prix_' + site)
+    if (m === EFFACE) return ''
+    if (String(m || '').trim() !== '') return String(m)
+    const v = prixSite(ref, site)
+    return v != null ? v.toFixed(2) : ''
+  }
+
+  /** Champs a effacement possible (prix sites, conc1) : vide = abandonner la valeur scrapee. */
+  const setSaisie = useCallback((ref, field, txt) => {
+    const t = String(txt ?? '').trim()
+    setManuels(m => ({ ...m, [ref]: { ...(m[ref] || {}), [field]: t === '' ? EFFACE : t } }))
+  }, [])
+
+  const titreSite = (ref, site, v, corrige, efface) => {
+    const r = (results[ref] || {})[site] || {}
+    const parts = []
+    if (efface) {
+      parts.push('Prix effacé — produit considéré absent de ce site')
+      if (r.prix != null) parts.push(`Prix scrapé ignoré : ${parseFloat(r.prix).toFixed(2)} €`)
+      parts.push('Saisir une valeur pour rétablir le prix')
+    } else if (corrige) {
+      const s = parseFloat(String(manuel(ref, 'prix_' + site)).replace(',', '.'))
+      if (!isNaN(s) && r.prix != null && Math.abs(s - parseFloat(r.prix)) > 0.001) {
+        parts.push(`Prix scrapé : ${parseFloat(r.prix).toFixed(2)} €`)
+      }
+      parts.push('Corrigé manuellement')
+      parts.push('Effacer le champ pour ignorer définitivement le prix scrapé')
+    } else if (v == null) {
+      parts.push(r.message || r.erreur || 'Introuvable au scrape — saisir un prix')
+    } else {
+      parts.push('Prix scrapé — modifiable')
+    }
+    if (r.nom) parts.push(r.nom)
+    if (r.url) parts.push(r.url)
+    return parts.join('\n')
+  }
+
   const payloadSites = (ref) => {
     const sites = {}
     const enCours = status === 'running' || status === 'pending'
     for (const site of SITES) {
-      const r = (results[ref] || {})[site]
-      if (r && !r.introuvable && r.prix != null) {
-        sites[site] = { prix: r.prix }
-      } else if (r && r.introuvable) {
-        sites[site] = { introuvable: true }
+      const v = prixSite(ref, site)
+      if (v != null) {
+        sites[site] = { prix: v }
       } else if (!enCours) {
         sites[site] = { introuvable: true }
       }
@@ -466,9 +572,10 @@ export default function MultiScrape() {
   }
 
   const trouverPrix = (ref) =>
-    Object.values(results[ref] || {}).some(r => r && !r.introuvable && r.prix != null)
+    SITES.some(s => prixSite(ref, s) != null) ||
+    Object.entries(results[ref] || {}).some(([site, r]) =>
+      !SITES.includes(site) && r && !r.introuvable && r.prix != null)
 
-  const conc1De = (ref) => conc1Map[ref]
 
   const aManuels = (ref) => Object.values(manuels[ref] || {}).some(v => String(v || '').trim() !== '')
   const manuelsHorsConc = (ref) => {
@@ -488,14 +595,16 @@ export default function MultiScrape() {
   const ALT_EXCEL = { cedi: ['cedi'], findis: ['find', 'findis'], gpdis: ['gpdis'], sogam: ['sogam'] }
 
   const estAJour = (ref) => {
-    const res = results[ref] || {}
     if (refsInfo[ref] && !refsInfo[ref].dans_excel) return false
     const p = refsExcelMap.get(norm(ref))
     if (!p) return false
     for (const site of SITES) {
       const ev = num(val(p, ALT_EXCEL[site]))
-      const r = res[site]
-      const sv = r && !r.introuvable && r.prix != null ? parseFloat(r.prix) : null
+      if (prixSiteEfface(ref, site)) {
+        if (ev != null) return false
+        continue
+      }
+      const sv = prixSite(ref, site)
       if (sv == null) continue
       if (ev == null) return false
       if (Math.abs(ev - sv) > 0.001) return false
@@ -520,9 +629,15 @@ export default function MultiScrape() {
 
   const appliquer = async (ref, silencieux = false) => {
     const sites = payloadSites(ref)
+    const prixApplique = {}
+    for (const site of SITES) {
+      if (!sites[site]) continue
+      prixApplique[site] = sites[site].introuvable ? null : sites[site].prix
+    }
     const m = manuels[ref] || {}
 const conc1Auto = conc1Map[ref]?.prix ?? null
       const conc1Manuel = (m.conc1 || '').trim()
+      const concEfface = conc1Efface(ref)
       const concApplied = conc1Texte(ref)
       const ecoVal = ecoUtilise(ref)
       if (Object.keys(sites).length === 0 && !aManuels(ref) && conc1Auto == null && !conc1Manuel && ecoVal == null) return
@@ -533,7 +648,7 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
           nom: (m.nom || '').trim() || (results[ref] || {}).cedi?.nom || '',
           sites,
           disponibilite: dispoMap[ref] || undefined,
-          conc1: concApplied !== '' ? concApplied : undefined,
+          conc1: concEfface ? CONC1_ABSENT : (concApplied !== '' ? concApplied : undefined),
         ean13: (m.ean13 || '').trim() || undefined,
         famille: (m.famille || '').trim() || undefined,
         sous_famille: (m.sous_famille || '').trim() || undefined,
@@ -563,7 +678,8 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
           }
           const np = num(dataMaj.eco_part != null ? dataMaj.eco_part : ecoVal)
           if (np != null) upd = setCle(upd, 'EP TTC', np)
-          if (concApplied !== '') upd = setCle(upd, 'CONC1', concApplied)
+          if (concEfface) upd = setCle(upd, 'CONC1', CONC1_ABSENT)
+          else if (concApplied !== '') upd = setCle(upd, 'CONC1', concApplied)
           if (fraisNum != null) upd = setCle(upd, 'Frais', fraisNum)
           return upd
         }))
@@ -571,9 +687,10 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
         setSaved(prev => ({
           ...prev,
           [ref]: {
-            conc: concApplied,
+            conc: concEfface ? null : concApplied,
             eco: ecoVal != null ? ecoVal : (prev[ref]?.eco ?? null),
             frais: fraisNum != null ? fraisNum : (prev[ref]?.frais ?? null),
+            prix: prixApplique,
           },
         }))
         viderManuels(ref)
@@ -583,9 +700,10 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
         setSaved(prev => ({
           ...prev,
           [ref]: {
-            conc: concApplied,
+            conc: concEfface ? null : concApplied,
             eco: ecoVal != null ? ecoVal : (prev[ref]?.eco ?? null),
             frais: fraisNum != null ? fraisNum : (prev[ref]?.frais ?? null),
+            prix: prixApplique,
           },
         }))
         viderManuels(ref)
@@ -737,7 +855,12 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
 
   const prixMinDe = (ref) => {
     const vals = []
-    for (const r of Object.values(results[ref] || {})) {
+    for (const [site, r] of Object.entries(results[ref] || {})) {
+      if (SITES.includes(site)) {
+        const v = prixSite(ref, site)
+        if (v != null) vals.push(v)
+        continue
+      }
       if (r && !r.introuvable && r.prix != null) {
         const v = parseFloat(r.prix)
         if (!isNaN(v)) vals.push(v)
@@ -747,21 +870,11 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
   }
 
   const conc1PrixDe = (ref) => {
-    const m = manuel(ref, 'conc1').trim()
-    if (m !== '') {
-      const n = prixDepuisTexte(m)
-      if (n != null && !isNaN(n)) return n
-    }
-    const sv = savedConc(ref)
-    if (sv !== '') {
-      const n = prixDepuisTexte(sv)
-      if (n != null && !isNaN(n)) return n
-    }
-    const ex = prixDepuisTexte(conc1Excel(ref))
-    if (ex != null && !isNaN(ex)) return ex
-    const auto = conc1Map[ref]?.prix
-    if (auto != null && !isNaN(parseFloat(auto))) return parseFloat(auto)
-    return null
+    if (conc1Efface(ref)) return null
+    const t = conc1Texte(ref)
+    if (t === '') return null
+    const n = prixDepuisTexte(t)
+    return n != null && !isNaN(n) ? n : null
   }
 
   const miniCalculePour = (ref) => {
@@ -1012,13 +1125,7 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
                 const prixExcel = excelPrix(p)
                 const ecoExcel = p ? ecoDe(p) : null
                 const nom = (results[ref]?.cedi?.nom || p ? String(val(p, ['designation', 'désignation', 'nom', 'name']) || '') : '') || ''
-                const minAll = (() => {
-                  const nums = Object.values(results[ref] || {})
-                    .filter(r => r && !r.introuvable && r.prix != null)
-                    .map(r => parseFloat(r.prix))
-                    .filter(v => !isNaN(v))
-                  return nums.length ? Math.min(...nums) : null
-                })()
+                const minAll = prixMinDe(ref)
                 const fraisUsed = fraisDe(ref, nom)
                 const ecoManuel = String((manuels[ref] || {}).eco || '').trim()
                 const ecoDefaut = ecoPart(ref) ?? ecoExcel
@@ -1077,35 +1184,44 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
                       </span>
                     </td>
                     {SITES.map(s => {
-                      const r = (results[ref] || {})[s]
-                      if (!r || r.introuvable || r.prix == null) return <td key={s} className={styles.muted}>-</td>
-                      const v = parseFloat(r.prix)
+                      const v = prixSite(ref, s)
+                      const efface = prixSiteEfface(ref, s)
+                      const corrige = !efface && prixSiteCorrige(ref, s)
+                      const cls = [
+                        styles.saisie,
+                        styles.saisiePrix,
+                        v == null ? styles.saisieVide : '',
+                        efface ? styles.saisieEfface : '',
+                        corrige ? styles.saisieCorrige : '',
+                        minAll != null && v === minAll ? styles.prixMinDot : '',
+                      ].filter(Boolean).join(' ')
                       return (
                         <td key={s}>
-                          <span className={`${styles.prixSite}${minAll != null && v === minAll ? ' ' + styles.prixMinDot : ''}`}>
-                            {v.toFixed(2)} €
-                          </span>
+                          <SaisieChamp
+                            onCommit={setSaisie}
+                            ligne={ref}
+                            field={'prix_' + s}
+                            className={cls}
+                            inputMode="decimal"
+                            value={saisiePrix(ref, s)}
+                            placeholder={efface ? 'effacé' : (v != null ? undefined : '—')}
+                            title={titreSite(ref, s, v, corrige, efface)}
+                          />
                         </td>
                       )
                     })}
                     <td className={styles.concCell}>
                       {(() => {
-                        const c1 = conc1De(ref)
-                        const texteConc = conc1Texte(ref)
-                        const tip = []
-                        if (c1) {
-                          if (c1.nom) tip.push(c1.nom)
-                          if (c1.url) tip.push(c1.url)
-                        }
+                        const efface = conc1Efface(ref)
                         return (
-                          <div className={styles.conc} title={tip.join(' · ') || undefined}>
+                          <div className={styles.conc} title={titreConc(ref)}>
                             <SaisieChamp
-                              onCommit={setManuel}
+                              onCommit={setSaisie}
                               ligne={ref}
                               field="conc1"
-                              className={`${styles.saisie} ${styles.saisieConc}`}
-                              placeholder="Prix + marchand (ex : 311 Ubaldi)…"
-                              value={texteConc}
+                              className={`${styles.saisie} ${styles.saisieConc}${efface ? ' ' + styles.saisieEfface : ''}`}
+                              placeholder={efface ? 'effacé' : 'Prix + marchand (ex : 311 Ubaldi)…'}
+                              value={conc1Texte(ref)}
                             />
                           </div>
                         )

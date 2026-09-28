@@ -350,7 +350,10 @@
 }
 .saisie:focus { border-color: #a855f7; box-shadow: 0 0 0 2px rgba(167, 85, 247, .25); }
 .saisie::placeholder { color: var(--text2); opacity: .7; }
-.saisiePrix { min-width: 84px; width: 84px; font-weight: 700; display: block; }
+.saisiePrix { min-width: 84px; width: 84px; font-weight: 700; display: block; text-align: right; }
+.saisieVide { color: var(--text2); font-weight: 500; border-style: dotted; }
+.saisieEfface { color: #ef4444; font-weight: 600; text-decoration: line-through; border-style: solid; border-color: #ef4444; }
+.saisieCorrige { border-style: solid; border-color: #f97316; color: #f97316; }
 .saisieConc { min-width: 150px; width: 150px; font-weight: 600; display: block; }
 
 /* ── Disponibilité (par fournisseur) ────────────────────── */
