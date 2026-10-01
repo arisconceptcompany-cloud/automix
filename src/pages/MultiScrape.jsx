@@ -281,80 +281,128 @@ export default function MultiScrape() {
     chargerProduits()
   }, [chargerProduits])
 
+  // Actions déjà appliquées (maj / marquage rouge) : le serveur les renvoie
+  // aussi dans refs[], ce localStorage ne sert que de filet si le snapshot
+  // serveur a été écrit avant cette version.
+  const refsActionsMemo = useMemo(() => {
+    const out = {}
+    for (const [ref, info] of Object.entries(refsInfo || {})) {
+      if (info && (info.maj || info.supprime)) {
+        out[ref] = { maj: !!info.maj, supprime: !!info.supprime }
+      }
+    }
+    return out
+  }, [refsInfo])
+
   // ── Persistance de session (résultats conservés au changement de menu) ──
   const enregistrerSession = useCallback(() => {
     if (!jobId) return
     try {
       localStorage.setItem(SESSION_KEY, JSON.stringify({
         jobId, status, fait, total, current, elapsed, jobMsg,
-        refsSel, sitesActifs, filtre, manuels, saved, jaunes, savedAt: Date.now(),
+        refsSel, sitesActifs, filtre, manuels, saved, jaunes,
+        refsActions: refsActionsMemo, savedAt: Date.now(),
       }))
     } catch { /* stockage local indisponible */ }
-  }, [jobId, status, fait, total, current, elapsed, jobMsg, refsSel, sitesActifs, filtre, manuels, saved, jaunes])
+  }, [jobId, status, fait, total, current, elapsed, jobMsg, refsSel, sitesActifs, filtre, manuels, saved, jaunes, refsActionsMemo])
 
   useEffect(() => { enregistrerSession() }, [enregistrerSession])
 
   useEffect(() => {
-    let saved = null
-    try { saved = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null') }
-    catch { saved = null }
-    if (!saved || !saved.jobId) return
-
-    if (Array.isArray(saved.refsSel)) restoredSelRef.current = saved.refsSel
-
+    let annule = false
     let essais = 0
     let timerRestore = null
-    const recupererStatut = () => {
-      axios.get(`/api/multi-scraper/statut/${saved.jobId}`)
-        .then(r => {
-          const d = r.data
-          if (saved.filtre) setFiltre(saved.filtre)
-          if (saved.manuels) setManuels(saved.manuels)
-          if (saved.saved) setSaved(saved.saved)
-          if (saved.jaunes) setJaunes(saved.jaunes)
-          if (saved.sitesActifs) setSitesActifs(saved.sitesActifs)
-          setSessionExiste(true)
-          setJobId(saved.jobId)
-          setStatus(d.status || 'idle')
-          setFait(d.fait ?? 0)
-          setTotal(d.total ?? 0)
-          setCurrent(d.current)
-          setResults(d.results || {})
-          setConc1Map(d.conc1 || {})
-          setDispoMap(d.dispo || {})
-          const nd = d.done_refs || []
-          setDoneRefs(nd)
-          if (nd.length) {
-            const ndSet = new Set(nd)
-            setRefsSel(prev => {
-              const n = prev.filter(x => !ndSet.has(x))
-              return n.length === prev.length ? prev : n
+
+    const restaurer = (jobId, local) => {
+      if (local && Array.isArray(local.refsSel)) restoredSelRef.current = local.refsSel
+
+      const recupererStatut = () => {
+        axios.get(`/api/multi-scraper/statut/${jobId}`)
+          .then(r => {
+            const d = r.data
+            if (local?.filtre) setFiltre(local.filtre)
+            if (local?.manuels) setManuels(local.manuels)
+            if (local?.saved) setSaved(local.saved)
+            if (local?.jaunes) setJaunes(local.jaunes)
+            if (local?.sitesActifs) setSitesActifs(local.sitesActifs)
+            setSessionExiste(true)
+            setJobId(jobId)
+            setStatus(d.status || 'idle')
+            setFait(d.fait ?? 0)
+            setTotal(d.total ?? 0)
+            setCurrent(d.current)
+            setResults(d.results || {})
+            setConc1Map(d.conc1 || {})
+            setDispoMap(d.dispo || {})
+            const nd = d.done_refs || []
+            setDoneRefs(nd)
+            if (nd.length) {
+              const ndSet = new Set(nd)
+              setRefsSel(prev => {
+                const n = prev.filter(x => !ndSet.has(x))
+                return n.length === prev.length ? prev : n
+              })
+            }
+// Le serveur fait foi (snapshots écrits par cette version) ; le localStorage
+            // ne complète que les références absentes des snapshots plus anciens.
+            setRefsInfo(() => {
+              const base = { ...(d.refs || {}) }
+              for (const [ref, act] of Object.entries(local?.refsActions || {})) {
+                base[ref] = { ...(base[ref] || {}), ...act }
+              }
+              return base
             })
-          }
-          setRefsInfo(d.refs || {})
-          if (d.message) setJobMsg(d.message)
-          if (d.duree != null) setElapsed(d.duree)
-          if (d.status === 'running' && d.duree != null) {
-            startedAt.current = Date.now() - d.duree * 1000
-          }
-        })
-        .catch(err => {
-          if (err.response && err.response.status === 404) {
-            try { localStorage.removeItem(SESSION_KEY) }
-            catch { /* stockage local indisponible */ }
-            setSessionExiste(false)
-            return
-          }
-          if (essais < 8) {
-            essais++
-            timerRestore = setTimeout(recupererStatut, 4000)
-          } else {
-            setJobMsg('Serveur injoignable — recharger la page pour réessayer la synchronisation')
-          }
-        })
+            if (d.message) setJobMsg(d.message)
+            if (d.duree != null) setElapsed(d.duree)
+            if (d.status === 'running' && d.duree != null) {
+              startedAt.current = Date.now() - d.duree * 1000
+            }
+          })
+          .catch(err => {
+            if (err.response && err.response.status === 404) {
+              try { localStorage.removeItem(SESSION_KEY) }
+              catch { /* stockage local indisponible */ }
+              setSessionExiste(false)
+              return
+            }
+            if (essais < 8) {
+              essais++
+              timerRestore = setTimeout(recupererStatut, 4000)
+            } else {
+              setJobMsg('Serveur injoignable — recharger la page pour réessayer la synchronisation')
+            }
+          })
+      }
+      recupererStatut()
     }
-    recupererStatut()
-    return () => { if (timerRestore) clearTimeout(timerRestore) }
+
+    // Le localStorage est cloisonné par origine : sur un autre domaine
+    // (ex. *.onrender.com) il peut contenir un job bien plus ancien que celui
+    // que le serveur considère comme le dernier. Le serveur fait foi.
+    const demarrer = async () => {
+      let local
+      try { local = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null') }
+      catch { local = null }
+
+      let cible = local?.jobId || null
+      try {
+        const r = await axios.get('/api/multi-scraper/dernier')
+        const d = r.data || {}
+        if (d.job_id && d.job_id !== cible) {
+          cible = d.job_id
+          local = null   // l'état UI local ne correspond plus à ce job
+        }
+      } catch { /* endpoint indisponible : on conserve le cache local */ }
+
+      if (annule || !cible) return
+      restaurer(cible, cible === local?.jobId ? local : null)
+    }
+
+    demarrer()
+    return () => {
+      annule = true
+      if (timerRestore) clearTimeout(timerRestore)
+    }
   }, [])
 
   useEffect(() => {
@@ -619,12 +667,16 @@ export default function MultiScrape() {
   }
 
   const aActionner = (ref) => {
-    if (refsInfo[ref]?.supprime) return false
-    if (refsInfo[ref] && !refsInfo[ref].dans_excel) return trouverPrix(ref) || aManuels(ref)
-    if (aSupprimer(ref)) return false
+    // Une saisie manuelle (dont une correction du Conc 1) ressuscite une
+    // référence marquée "Supprimé" : sans cela le verrou est définitif et
+    // l'utilisateur n'a plus aucun moyen de la faire revenir.
+    const manuel = aManuels(ref)
+    if (refsInfo[ref]?.supprime && !manuel) return false
+    if (refsInfo[ref] && !refsInfo[ref].dans_excel) return trouverPrix(ref) || manuel
+    if (!manuel && aSupprimer(ref)) return false
     // Déjà marqué à jour : ne réafficher le bouton que si l'utilisateur a re-saisi un champ
-    if (refsInfo[ref]?.maj) return aManuels(ref)
-    return !estAJour(ref) || aManuels(ref)
+    if (refsInfo[ref]?.maj && !manuel) return false
+    return !estAJour(ref) || manuel
   }
 
   const appliquer = async (ref, silencieux = false) => {
@@ -645,6 +697,7 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
       try {
         const base = {
           reference: ref,
+          job_id: jobId,
           nom: (m.nom || '').trim() || (results[ref] || {}).cedi?.nom || '',
           sites,
           disponibilite: dispoMap[ref] || undefined,
@@ -683,7 +736,7 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
           if (fraisNum != null) upd = setCle(upd, 'Frais', fraisNum)
           return upd
         }))
-        setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), maj: true, dans_excel: true } }))
+        setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), maj: true, dans_excel: true, supprime: false } }))
         setSaved(prev => ({
           ...prev,
           [ref]: {
@@ -696,7 +749,7 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
         viderManuels(ref)
         pushToast(ref, 'mis à jour')
       } else if (dataMaj.ajout > 0) {
-        setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), dans_excel: true, maj: true } }))
+        setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), dans_excel: true, maj: true, supprime: false } }))
         setSaved(prev => ({
           ...prev,
           [ref]: {
@@ -729,7 +782,7 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
         const ref = refs[suivant++]
         if (aSupprimer(ref)) {
           try {
-            await axios.delete('/api/multi-scraper/supprimer-reference', { data: { reference: ref } })
+await axios.delete('/api/multi-scraper/supprimer-reference', { data: { reference: ref, job_id: jobId } })
             setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), supprime: true } }))
             sup++
             pushToast(ref, 'supprimé')
@@ -757,21 +810,6 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
     if (ajout) morceaux.push(`${ajout} ajouté(s)`)
     if (sup) morceaux.push(`${sup} marqué(s) en rouge`)
     setMsg({ type: 'ok', texte: morceaux.length ? `${morceaux.join(', ')} dans l'Excel` : "Rien à appliquer" })
-  }
-
-  const supprimer = async (ref) => {
-    setBusyRefs(prev => ({ ...prev, [ref]: true }))
-    try {
-      const r = await axios.delete('/api/multi-scraper/supprimer-reference', { data: { reference: ref } })
-      setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), supprime: true } }))
-      viderManuels(ref)
-      setMsg({ type: 'ok', texte: r.data.message })
-      pushToast(ref, 'supprimé')
-    } catch (e) {
-      setMsg({ type: 'err', texte: e.response?.data?.erreur || "Erreur lors du marquage en rouge" })
-    } finally {
-      setBusyRefs(prev => { const n = { ...prev }; delete n[ref]; return n })
-    }
   }
 
   const dispoSite = (ref, site) => dispoMap[ref]?.[site] || results[ref]?.[site]?.disponibilite
@@ -900,6 +938,78 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
 
   const refsAffichees = Object.keys(refsInfo).filter(ref => results[ref])
   const pct = total > 0 ? Math.round((fait / total) * 100) : 0
+
+  // ── Suppression automatique ────────────────────────────────────────────
+  // Une référence à supprimer (aucun prix site, ou mini > Conc 1) est marquée
+  // en rouge sans intervention : il n'y a rien à arbitrer, l'action est
+  // toujours la même. Seul "mettre à jour" reste manuel.
+  // aSupprimer et refsAffichees sont recréés à chaque render : on les lit via
+  // un ref pour que l'effet ne se redéclenche pas indéfiniment.
+  const aSupprimerRef = useRef(aSupprimer)
+  const refsAfficheesRef = useRef(refsAffichees)
+  useEffect(() => {
+    aSupprimerRef.current = aSupprimer
+    refsAfficheesRef.current = refsAffichees
+  })
+
+  const autoTraiteRef = useRef({})
+  useEffect(() => {
+    if (status !== 'done' && status !== 'stopped') return
+    if (!jobId) return
+    if (autoTraiteRef.current.jobId !== jobId) autoTraiteRef.current = { jobId, refs: new Set() }
+    const dejaTraites = autoTraiteRef.current.refs
+    const testSuppr = aSupprimerRef.current
+    const cibles = refsAfficheesRef.current.filter(ref => testSuppr(ref) && !dejaTraites.has(ref))
+    if (!cibles.length) return
+    cibles.forEach(ref => dejaTraites.add(ref))
+    let annule = false
+    ;(async () => {
+      let marquees = 0
+      const limite = 4
+      let suivant = 0
+      const travailleurs = Array.from({ length: Math.min(limite, cibles.length) }, async () => {
+        while (suivant < cibles.length) {
+          const ref = cibles[suivant++]
+          if (annule) return
+          try {
+            await axios.delete('/api/multi-scraper/supprimer-reference', { data: { reference: ref, job_id: jobId } })
+            if (annule) return
+            setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), supprime: true } }))
+            viderManuels(ref)
+            marquees++
+          } catch {
+            // ligne laissée à l'utilisateur si le marquage échoue
+          }
+        }
+      })
+      await Promise.all(travailleurs)
+      if (annule || !marquees) return
+      setMsg({ type: 'ok', texte: `${marquees} référence(s) marquée(s) en rouge automatiquement` })
+      chargerProduits()
+    })()
+    return () => { annule = true }
+  }, [status, jobId, chargerProduits])
+
+  // ── Réconciliation des tâches déjà faites avant cette version ──────────
+  // Reconstruit maj/supprime depuis l'Excel réel : ni réécriture du fichier,
+  // ni nouveau scraping, uniquement la relecture des prix et des polices.
+  const [reconcilie, setReconcilie] = useState(false)
+  const reconcilier = async () => {
+    if (!jobId) return
+    setBusy(true)
+    try {
+      const r = await axios.post('/api/multi-scraper/reconcilier', { job_id: jobId })
+      const d = r.data || {}
+      if (d.refs) setRefsInfo(d.refs)
+      setMsg({ type: 'ok', texte: d.message || 'Réconciliation terminée' })
+      setReconcilie(true)
+      chargerProduits()
+    } catch (e) {
+      setMsg({ type: 'err', texte: e.response?.data?.erreur || 'Réconciliation impossible' })
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <div className={`${styles.page}${pleinEcran ? ' ' + styles.pleinEcran : ''}`}>
@@ -1065,6 +1175,16 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
             {refsAffichees.some(aActionner) && (
               <button className={styles.btnMajLot} onClick={appliquerTout} disabled={busy}>
                 {busy ? <><Loader size={13} className={styles.spin}/> Application…</> : <><CheckCircle2 size={13}/> Appliquer tout</>}
+              </button>
+            )}
+            {(status === 'done' || status === 'stopped') && !reconcilie && (
+              <button
+                className={styles.btnPlein}
+                onClick={reconcilier}
+                disabled={busy}
+                title="Relire l'Excel pour marquer comme traitées les références déjà mises à jour ou colorées en rouge avant cette version — sans réécrire le fichier"
+              >
+                <RefreshCw size={13}/> Reconcilier
               </button>
             )}
             <button
@@ -1276,10 +1396,10 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
                       )}
                     </td>
                     <td>
-                      {refsInfo[ref]?.supprime
+                      {refsInfo[ref]?.supprime && !aManuels(ref)
                         ? <span className={styles.statutSupp} title="Référence marquée en rouge (à supprimer)"><Trash2 size={13}/> Supprimé</span>
                         : aSupprimer(ref)
-                          ? <span className={styles.statutSupp} title={sansPrixSite(ref) ? 'Aucun prix sur CEDI/FINDIS/GPDIS/SOGAM' : 'Mini supérieur au prix concurrent (Conc 1)'}><Trash2 size={13}/> Supprimer</span>
+                          ? <span className={styles.statutSupp} title="Marquage en rouge automatique"><Loader size={13} className={styles.spin}/> Suppression…</span>
                           : sansPrixSite(ref)
                             ? <span className={styles.statutIntra}><XCircle size={13}/>-</span>
                             : refsInfo[ref]?.dans_excel && (estAJour(ref) || refsInfo[ref]?.maj) && !aManuels(ref)
@@ -1287,15 +1407,10 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
                               : <span className={styles.statutOk}><CheckCircle2 size={13}/> Trouvé</span>}
                     </td>
                     <td>
-                      {refsInfo[ref]?.supprime ? (
+                      {refsInfo[ref]?.supprime && !aManuels(ref) ? (
                         <span className={styles.muted}>—</span>
                       ) : aSupprimer(ref) ? (
-                        <button className={styles.btnSupp}
-                          onClick={() => supprimer(ref)}
-                          disabled={busy || busyRefs[ref]}
-                          title={sansPrixSite(ref) ? 'Marquer en rouge : aucun prix site' : 'Marquer en rouge : mini > Conc 1'}>
-                          {busyRefs[ref] ? <Loader size={12} className={styles.spin}/> : <Trash2 size={12}/>} Supprimer
-                        </button>
+                        <span className={styles.muted}>marquage…</span>
                       ) : aActionner(ref) ? (
                         <button className={styles.btnMaj}
                           onClick={() => appliquer(ref)}
