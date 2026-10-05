@@ -60,6 +60,10 @@ const setCle = (o, key, value) => {
   return out
 }
 
+// Objet stylique hoisté : passé en prop à SaisieChamp (memo), un littéral
+// inline serait une nouvelle référence à chaque rendu et neutraliserait le memo.
+const STYLE_FR = { width: 52 }
+
 const SaisieChamp = memo(function SaisieChamp({
   onCommit, ligne, field, value, placeholder, title, inputMode, className, extraStyle,
 }) {
@@ -306,7 +310,18 @@ export default function MultiScrape() {
     } catch { /* stockage local indisponible */ }
   }, [jobId, status, fait, total, current, elapsed, jobMsg, refsSel, sitesActifs, filtre, manuels, saved, jaunes, refsActionsMemo])
 
-  useEffect(() => { enregistrerSession() }, [enregistrerSession])
+  // La session est re-serialisee a chaque frappe dans le champ frais (car
+  // `manuels` est dans les dependances de `enregistrerSession`). localStorage
+  // etant synchrone et bloquant, on regroupe les ecritures : sans cela chaque
+  // saisie fige l'interface le temps du JSON.stringify + de l'ecriture disque.
+  const writeSessionTimer = useRef(null)
+  useEffect(() => {
+    if (writeSessionTimer.current) clearTimeout(writeSessionTimer.current)
+    writeSessionTimer.current = setTimeout(() => {
+      writeSessionTimer.current = null
+      enregistrerSession()
+    }, 800)
+  }, [enregistrerSession])
 
   useEffect(() => {
     let annule = false
@@ -679,89 +694,108 @@ export default function MultiScrape() {
     return !estAJour(ref) || manuel
   }
 
-  const appliquer = async (ref, silencieux = false) => {
-    const sites = payloadSites(ref)
-    const prixApplique = {}
+  /** Prix retenus pour l'affichage local apres application (null si introuvable). */
+  const prixAppliquePour = (ref, sites) => {
+    const out = {}
     for (const site of SITES) {
       if (!sites[site]) continue
-      prixApplique[site] = sites[site].introuvable ? null : sites[site].prix
+      out[site] = sites[site].introuvable ? null : sites[site].prix
     }
+    return out
+  }
+
+  /**
+   * Construit le payload d'une reference a partir de l'etat de l'interface.
+   * Renvoie null quand il n'y a rien a ecrire (evite un POST inutile).
+   * Partage par `appliquer` (bouton d'une ligne) et `appliquerTout` (lot) pour
+   * garantir que le lot applique exactement la meme chose que le bouton.
+   */
+  const payloadPour = (ref) => {
+    const sites = payloadSites(ref)
     const m = manuels[ref] || {}
-const conc1Auto = conc1Map[ref]?.prix ?? null
-      const conc1Manuel = (m.conc1 || '').trim()
-      const concEfface = conc1Efface(ref)
-      const concApplied = conc1Texte(ref)
-      const ecoVal = ecoUtilise(ref)
-      if (Object.keys(sites).length === 0 && !aManuels(ref) && conc1Auto == null && !conc1Manuel && ecoVal == null) return
-      if (!silencieux) setBusyRefs(prev => ({ ...prev, [ref]: true }))
-      try {
-        const base = {
-          reference: ref,
-          job_id: jobId,
-          nom: (m.nom || '').trim() || (results[ref] || {}).cedi?.nom || '',
-          sites,
-          disponibilite: dispoMap[ref] || undefined,
-          conc1: concEfface ? CONC1_ABSENT : (concApplied !== '' ? concApplied : undefined),
-        ean13: (m.ean13 || '').trim() || undefined,
-        famille: (m.famille || '').trim() || undefined,
-        sous_famille: (m.sous_famille || '').trim() || undefined,
-      }
-      const fraisVal = (m.frais || '').trim()
-      const fraisNum = fraisVal !== '' && !isNaN(parseFloat(fraisVal)) ? parseFloat(fraisVal) : null
-      if (fraisNum != null) base.frais = fraisNum
-      if (ecoVal != null) base.eco_part = ecoVal
-      let r
-      if (refsInfo[ref]?.dans_excel) {
-        r = await axios.post('/api/multi-scraper/mettre-a-jour', base)
-      } else {
-        r = await axios.post('/api/multi-scraper/ajouter', base)
-      }
-      const dataMaj = r.data || {}
-      if (refsInfo[ref]?.dans_excel) {
-        // Succès HTTP : toujours marquer à jour (même si mis_a_jour === 0)
-        setProduits(prev => prev.map(p => {
-          const refKey = val(p, ['reference', 'ref', 'sku', 'article'])
-          if (norm(refKey) !== norm(ref)) return p
-          const maj = dataMaj.updated || {}
-          let upd = { ...p }
-          for (const site of SITES) {
-            const nv = num(maj[site])
-            if (nv != null) upd = setCle(upd, SITE_EXCEL_KEY[site], nv)
-            else if (sites[site] && sites[site].introuvable) upd = setCle(upd, SITE_EXCEL_KEY[site], null)
-          }
-          const np = num(dataMaj.eco_part != null ? dataMaj.eco_part : ecoVal)
-          if (np != null) upd = setCle(upd, 'EP TTC', np)
-          if (concEfface) upd = setCle(upd, 'CONC1', CONC1_ABSENT)
-          else if (concApplied !== '') upd = setCle(upd, 'CONC1', concApplied)
-          if (fraisNum != null) upd = setCle(upd, 'Frais', fraisNum)
-          return upd
-        }))
-        setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), maj: true, dans_excel: true, supprime: false } }))
-        setSaved(prev => ({
-          ...prev,
-          [ref]: {
-            conc: concEfface ? null : concApplied,
-            eco: ecoVal != null ? ecoVal : (prev[ref]?.eco ?? null),
-            frais: fraisNum != null ? fraisNum : (prev[ref]?.frais ?? null),
-            prix: prixApplique,
-          },
-        }))
-        viderManuels(ref)
-        pushToast(ref, 'mis à jour')
-      } else if (dataMaj.ajout > 0) {
-        setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), dans_excel: true, maj: true, supprime: false } }))
-        setSaved(prev => ({
-          ...prev,
-          [ref]: {
-            conc: concEfface ? null : concApplied,
-            eco: ecoVal != null ? ecoVal : (prev[ref]?.eco ?? null),
-            frais: fraisNum != null ? fraisNum : (prev[ref]?.frais ?? null),
-            prix: prixApplique,
-          },
-        }))
-        viderManuels(ref)
-        pushToast(ref, 'ajouté')
-      }
+    const conc1Auto = conc1Map[ref]?.prix ?? null
+    const conc1Manuel = (m.conc1 || '').trim()
+    const concEfface = conc1Efface(ref)
+    const concApplied = conc1Texte(ref)
+    const ecoVal = ecoUtilise(ref)
+    if (Object.keys(sites).length === 0 && !aManuels(ref) && conc1Auto == null && !conc1Manuel && ecoVal == null) return null
+    const base = {
+      reference: ref,
+      job_id: jobId,
+      nom: (m.nom || '').trim() || (results[ref] || {}).cedi?.nom || '',
+      sites,
+      disponibilite: dispoMap[ref] || undefined,
+      conc1: concEfface ? CONC1_ABSENT : (concApplied !== '' ? concApplied : undefined),
+      ean13: (m.ean13 || '').trim() || undefined,
+      famille: (m.famille || '').trim() || undefined,
+      sous_famille: (m.sous_famille || '').trim() || undefined,
+    }
+    const fraisVal = (m.frais || '').trim()
+    const fraisNum = fraisVal !== '' && !isNaN(parseFloat(fraisVal)) ? parseFloat(fraisVal) : null
+    if (fraisNum != null) base.frais = fraisNum
+    if (ecoVal != null) base.eco_part = ecoVal
+    return { base, sites, fraisNum, ecoVal, concEfface, concApplied }
+  }
+
+  /** Reporte dans l'etat local le resultat d'une reference. */
+  const appliquerResultat = (ref, dataMaj, ctx, silencieux) => {
+    const { sites, fraisNum, ecoVal, concEfface, concApplied } = ctx
+    if (refsInfo[ref]?.dans_excel) {
+      // Succes HTTP : toujours marquer a jour (meme si mis_a_jour === 0)
+      setProduits(prev => prev.map(p => {
+        const refKey = val(p, ['reference', 'ref', 'sku', 'article'])
+        if (norm(refKey) !== norm(ref)) return p
+        const maj = dataMaj.updated || {}
+        let upd = { ...p }
+        for (const site of SITES) {
+          const nv = num(maj[site])
+          if (nv != null) upd = setCle(upd, SITE_EXCEL_KEY[site], nv)
+          else if (sites[site] && sites[site].introuvable) upd = setCle(upd, SITE_EXCEL_KEY[site], null)
+        }
+        const np = num(dataMaj.eco_part != null ? dataMaj.eco_part : ecoVal)
+        if (np != null) upd = setCle(upd, 'EP TTC', np)
+        if (concEfface) upd = setCle(upd, 'CONC1', CONC1_ABSENT)
+        else if (concApplied !== '') upd = setCle(upd, 'CONC1', concApplied)
+        if (fraisNum != null) upd = setCle(upd, 'Frais', fraisNum)
+        return upd
+      }))
+      setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), maj: true, dans_excel: true, supprime: false } }))
+      setSaved(prev => ({
+        ...prev,
+        [ref]: {
+          conc: concEfface ? null : concApplied,
+          eco: ecoVal != null ? ecoVal : (prev[ref]?.eco ?? null),
+          frais: fraisNum != null ? fraisNum : (prev[ref]?.frais ?? null),
+          prix: prixAppliquePour(ref, sites),
+        },
+      }))
+      viderManuels(ref)
+      if (!silencieux) pushToast(ref, 'mis à jour')
+    } else if (dataMaj.ajout > 0) {
+      setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), dans_excel: true, maj: true, supprime: false } }))
+      setSaved(prev => ({
+        ...prev,
+        [ref]: {
+          conc: concEfface ? null : concApplied,
+          eco: ecoVal != null ? ecoVal : (prev[ref]?.eco ?? null),
+          frais: fraisNum != null ? fraisNum : (prev[ref]?.frais ?? null),
+          prix: prixAppliquePour(ref, sites),
+        },
+      }))
+      viderManuels(ref)
+      if (!silencieux) pushToast(ref, 'ajouté')
+    }
+  }
+
+  const appliquer = async (ref, silencieux = false) => {
+    const ctx = payloadPour(ref)
+    if (!ctx) return
+    if (!silencieux) setBusyRefs(prev => ({ ...prev, [ref]: true }))
+    try {
+      const r = refsInfo[ref]?.dans_excel
+        ? await axios.post('/api/multi-scraper/mettre-a-jour', ctx.base)
+        : await axios.post('/api/multi-scraper/ajouter', ctx.base)
+      appliquerResultat(ref, r.data || {}, ctx, silencieux)
       if (!silencieux) setMsg({ type: 'ok', texte: r.data.message })
       return r.data
     } catch (e) {
@@ -771,45 +805,128 @@ const conc1Auto = conc1Map[ref]?.prix ?? null
     }
   }
 
+
+  /**
+   * Applique TOUTES les references en attente.
+   *
+   * Avant : une requete par reference, jusqu'a 6 en parallele, chacune
+   * relisant ET reecrivant le classeur entier sous un verrou mono-fichier.
+   * Resultat : saturation du verrou (500 "Fichier Excel occupe"), descripteurs
+   * epuises, et surtout des `catch {}` VIDES qui avalaient chaque echec : le
+   * badge restait indefiniment "a mettre a jour" sans aucun message.
+   *
+   * Maintenant : une requete par categorie (maj / ajout / marquage rouge), avec
+   * un seul verrou et un seul rechargement du classeur, et un rapport par
+   * reference. Plus rien n'est perdu en silence.
+   */
   const appliquerTout = async () => {
     setBusy(true)
+    const aSuppr = [], aMaj = [], aAjout = []
+    for (const ref of Object.keys(results)) {
+      if (aSupprimer(ref)) aSuppr.push(ref)
+      else if (aActionner(ref)) (refsInfo[ref]?.dans_excel ? aMaj : aAjout).push(ref)
+    }
+
+    const echecs = []
     let maj = 0, ajout = 0, sup = 0
-    const refs = Object.keys(results).filter(r => aSupprimer(r) || aActionner(r))
-    const LIMITE = 6
-    let suivant = 0
-    const travailleurs = Array.from({ length: Math.min(LIMITE, refs.length) }, async () => {
-      while (suivant < refs.length) {
-        const ref = refs[suivant++]
-        if (aSupprimer(ref)) {
-          try {
-await axios.delete('/api/multi-scraper/supprimer-reference', { data: { reference: ref, job_id: jobId } })
-            setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), supprime: true } }))
-            sup++
-            pushToast(ref, 'supprimé')
-          } catch {
-            // ligne ignorée si son marquage a échoué
-          }
-          continue
+
+    // 1) Marquage "supprime" : un seul lot, un seul rechargement du classeur.
+    if (aSuppr.length) {
+      try {
+        const r = await axios.post('/api/multi-scraper/supprimer-reference-lot', {
+          items: aSuppr.map(reference => ({ reference, job_id: jobId })),
+        })
+        const d = r.data || {}
+        sup = (d.marquees || 0) + (d.deja_absentes || 0)
+        for (const ref of Object.keys(d.resultats || {})) {
+          setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), supprime: true } }))
         }
+        for (const e of (d.echecs || [])) echecs.push({ ...e, operation: 'marquage rouge' })
+      } catch (e) {
+        echecs.push({
+          reference: null, operation: 'marquage rouge',
+          message: e.response?.data?.erreur || e.message || 'Erreur réseau',
+        })
+      }
+    }
+
+    // 2) References deja dans l'Excel : un seul POST /mettre-a-jour-lot.
+    if (aMaj.length) {
+      const ctxs = []
+      const items = []
+      for (const ref of aMaj) {
+        const ctx = payloadPour(ref)
+        if (!ctx) continue
+        ctxs.push([ref, ctx])
+        items.push(ctx.base)
+      }
+      if (items.length) {
         try {
-          const d = await appliquer(ref, true)
-          if (d) {
-            if (d.ajout > 0) ajout++
-            else maj++
+          const r = await axios.post('/api/multi-scraper/mettre-a-jour-lot', { items })
+          const d = r.data || {}
+          const resultats = d.resultats || {}
+          for (const [ref, ctx] of ctxs) {
+            if (resultats[ref]) {
+              maj++
+              appliquerResultat(ref, resultats[ref], ctx, true)
+            }
           }
-        } catch {
-          // ligne ignorée si son application a échoué
+          for (const e of (d.echecs || [])) echecs.push({ ...e, operation: 'mise à jour' })
+        } catch (e) {
+          echecs.push({
+            reference: null, operation: 'mise à jour',
+            message: e.response?.data?.erreur || e.message || 'Erreur réseau',
+          })
         }
       }
-    })
-    await Promise.all(travailleurs)
+    }
+
+    // 3) References absentes du classeur : l'ajout cree une ligne, il n'existe
+    //    pas de route "lot" equivalente car l'ecriture depend de la structure
+    //    du fichier. Ces references sont rares et treatmentes une par une.
+    for (const ref of aAjout) {
+      const ctx = payloadPour(ref)
+      if (!ctx) continue
+      try {
+        const r = await axios.post('/api/multi-scraper/ajouter', ctx.base)
+        if ((r.data || {}).ajout > 0) {
+          ajout++
+          appliquerResultat(ref, r.data, ctx, true)
+        }
+      } catch (e) {
+        echecs.push({
+          reference: ref, operation: 'ajout',
+          message: e.response?.data?.erreur || e.message || 'Erreur réseau',
+        })
+      }
+    }
+
     setBusy(false)
     chargerProduits()
+
     const morceaux = []
     if (maj) morceaux.push(`${maj} mis à jour`)
     if (ajout) morceaux.push(`${ajout} ajouté(s)`)
     if (sup) morceaux.push(`${sup} marqué(s) en rouge`)
-    setMsg({ type: 'ok', texte: morceaux.length ? `${morceaux.join(', ')} dans l'Excel` : "Rien à appliquer" })
+
+    if (echecs.length) {
+      // Les references absentes du classeur ne sont pas des pannes : elles
+      // n'existent tout simplement pas encore et doivent etre ajoutees.
+      const aCreer = echecs.filter(e => e.code === 404)
+      const vraies = echecs.filter(e => e.code !== 404)
+      const details = [
+        ...vraies.slice(0, 5).map(e => `${e.reference || 'lot'} : ${e.message}`),
+        ...(vraies.length > 5 ? [`… +${vraies.length - 5} autre(s)`] : []),
+        ...aCreer.slice(0, 3).map(e => `${e.reference} : absent du classeur (à ajouter)`),
+        ...(aCreer.length > 3 ? [`… +${aCreer.length - 3} autre(s) absente(s)`] : []),
+      ]
+      setMsg({
+        type: 'err',
+        texte: `${morceaux.length ? morceaux.join(', ') + ' — ' : ''}${echecs.length} échec(s) : ${details.join(' | ')}`,
+      })
+    } else {
+      setMsg({ type: 'ok', texte: morceaux.length ? `${morceaux.join(', ')} dans l'Excel` : "Rien à appliquer" })
+    }
   }
 
   const dispoSite = (ref, site) => dispoMap[ref]?.[site] || results[ref]?.[site]?.disponibilite
@@ -964,28 +1081,31 @@ await axios.delete('/api/multi-scraper/supprimer-reference', { data: { reference
     cibles.forEach(ref => dejaTraites.add(ref))
     let annule = false
     ;(async () => {
-      let marquees = 0
-      const limite = 4
-      let suivant = 0
-      const travailleurs = Array.from({ length: Math.min(limite, cibles.length) }, async () => {
-        while (suivant < cibles.length) {
-          const ref = cibles[suivant++]
-          if (annule) return
-          try {
-            await axios.delete('/api/multi-scraper/supprimer-reference', { data: { reference: ref, job_id: jobId } })
-            if (annule) return
-            setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), supprime: true } }))
-            viderManuels(ref)
-            marquees++
-          } catch {
-            // ligne laissée à l'utilisateur si le marquage échoue
-          }
+      try {
+        // Un seul lot : un seul rechargement du classeur au lieu d'un par
+        // reference. Les references absentes du classeur ne sont plus une
+        // erreur 404 (voir route supprimer-reference) : elles sont comptees
+        // comme deja absentes, donc l'action ne sera plus proposee.
+        const r = await axios.post('/api/multi-scraper/supprimer-reference-lot', {
+          items: cibles.map(reference => ({ reference, job_id: jobId })),
+        })
+        if (annule) return
+        const d = r.data || {}
+        const marquees = (d.marquees || 0) + (d.deja_absentes || 0)
+        for (const ref of Object.keys(d.resultats || {})) {
+          setRefsInfo(prev => ({ ...prev, [ref]: { ...(prev[ref] || {}), supprime: true } }))
+          viderManuels(ref)
         }
-      })
-      await Promise.all(travailleurs)
-      if (annule || !marquees) return
-      setMsg({ type: 'ok', texte: `${marquees} référence(s) marquée(s) en rouge automatiquement` })
-      chargerProduits()
+        if (!marquees) return
+        const echecs = d.echecs || []
+        setMsg(echecs.length
+          ? { type: 'err', texte: `${marquees} référence(s) marquée(s) en rouge, ${echecs.length} en échec` }
+          : { type: 'ok', texte: `${marquees} référence(s) marquée(s) en rouge automatiquement` })
+        chargerProduits()
+      } catch (e) {
+        if (annule) return
+        setMsg({ type: 'err', texte: e.response?.data?.erreur || 'Échec du marquage automatique' })
+      }
     })()
     return () => { annule = true }
   }, [status, jobId, chargerProduits])
@@ -1383,7 +1503,7 @@ await axios.delete('/api/multi-scraper/supprimer-reference', { data: { reference
                         field="frais"
                         className={styles.saisie}
                         inputMode="decimal"
-                        extraStyle={{ width: 52 }}
+                        extraStyle={STYLE_FR}
                         value={String(fraisUsed)}
                         title={`Frais utilisé pour le calcul du mini : ${fraisUsed} € (modifiable — recalcul au clic sur Appliquer)`}
                       />

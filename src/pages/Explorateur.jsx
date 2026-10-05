@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react'
 import { useLocation } from 'react-router-dom'
 import {
   Globe, Search, Loader, ExternalLink, ChevronLeft, ChevronRight,
@@ -12,6 +12,63 @@ import styles from './Explorateur.module.css'
 
 const SNAPSHOT_PREFIX = 'explo_site_v1_'
 const normaliserUrl = (u) => (u || '').trim().replace(/\/+$/, '')
+
+/**
+ * Champ de saisie isole : l'etat de frappe vit ICI, pas dans le state global
+ * `edits` du tableau parent.
+ *
+ * Pourquoi : `edits` est un objet plat partage par toutes les lignes. Ecrire
+ * dedans recreait l'objet, donc re-rendait TOUTES les lignes du tableau a chaque
+ * caractere (plusieurs centaines de lignes x une cellule avec <img> et une
+ * dozenaine de noeuds). Sur un `input type="number"`, les fleches du navigateur
+ * sont juste sous le curseur : un simple clic pour placer le curseur declenchait
+ * un re-rendu complet, et le navigateur saccadait.
+ *
+ * Le composant est `memo` + debounce 350 ms + commit sur blur/Entree : la frappe
+ * est instantanee, et le parent n'est re-rendu qu'une fois par edition.
+ */
+const SaisieFrais = memo(function SaisieFrais({ champ, value, titre, onCommit }) {
+  const [txt, setTxt] = useState(value)
+  const premier = useRef(true)
+  const derniereValeur = useRef(value)
+
+  useEffect(() => {
+    if (premier.current) { premier.current = false; return }
+    if (value === derniereValeur.current) return
+    derniereValeur.current = value
+    setTxt(value)
+  }, [value])
+
+  useEffect(() => {
+    if (premier.current) return
+    if (txt === derniereValeur.current) return
+    const t = setTimeout(() => {
+      derniereValeur.current = txt
+      onCommit(champ, txt)
+    }, 350)
+    return () => clearTimeout(t)
+  }, [txt, onCommit, champ])
+
+  const commit = () => {
+    derniereValeur.current = txt
+    onCommit(champ, txt)
+  }
+
+  return (
+    <input
+      type="number"
+      step="0.01"
+      className={styles.editInput}
+      style={{ width: 56 }}
+      title={titre}
+      value={txt}
+      onChange={e => setTxt(e.target.value)}
+      onClick={e => e.stopPropagation()}
+      onBlur={commit}
+      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commit() } }}
+    />
+  )
+})
 
 function CaptchaModal({ siteKey, onSolve, onClose, loading }) {
   const containerRef = useRef(null)
@@ -983,6 +1040,15 @@ export default function Explorateur() {
     return ''
   }
 
+  /**
+   * Ecriture du frais d'une ligne. useCallback vide => reference stable, donc
+   * les <SaisieFrais> des autres lignes ne sont pas re-rendus quand on edite
+   * une seule ligne (c'est ce que `memo` attend).
+   */
+  const setFrais = useCallback((champ, valeur) => {
+    setEdits(prev => ({ ...prev, [`frais_${champ}`]: valeur }))
+  }, [])
+
   return (
     <div className={styles.page}>
 
@@ -1245,8 +1311,13 @@ export default function Explorateur() {
                           const prixChange = p.prix != null && p.prix_excel != null && Math.abs(parseFloat(p.prix) - parseFloat(p.prix_excel)) > 0.001
                           const fraisSaisi = edits[`frais_${key}`] !== undefined && edits[`frais_${key}`] !== ''
                           const montreMisAJour = (p._mis_a_jour === true || ajoutsEnCours[`update_${p.reference}`] === 'done') && !prixChange && !fraisSaisi
+                          // fraisUtilise() est appele une seule fois par ligne : il
+                          // enchaine prixsMin() + detecterFrais() (recherche par
+                          // mots-cles sur le nom). L'appeler deux fois (value + title)
+                          // doublait le travail de rendu de tout le tableau.
+                          const fraisAffiche = fraisUtilise(p, key)
                           return (
-                            <tr key={i} className={couleur(p)}>
+                            <tr key={key} className={couleur(p)}>
                               <td className={styles.num}>{i+1}</td>
                               <td className={styles.photoCell}>
                                 {p.image
@@ -1455,13 +1526,11 @@ export default function Explorateur() {
                                 </span>
                               </td>
                                <td>
-                                 <input type="number" step="0.01"
-                                   value={edits[`frais_${key}`] ?? fraisUtilise(p, key)}
-                                   onChange={e => setEdits(prev => ({...prev, [`frais_${key}`]: e.target.value}))}
-                                   title={`Frais utilisé pour le calcul du mini : ${fraisUtilise(p, key)} € (modifiable, recalcul au clic sur « à mettre à jour » / « à ajouter »)`}
-                                   className={styles.editInput}
-                                   onClick={e => e.stopPropagation()}
-                                   style={{width:56}}
+                                 <SaisieFrais
+                                   champ={key}
+                                   value={edits[`frais_${key}`] ?? fraisAffiche}
+                                   titre={`Frais utilisé pour le calcul du mini : ${fraisAffiche} € (modifiable, recalcul au clic sur « à mettre à jour » / « à ajouter »)`}
+                                   onCommit={setFrais}
                                  />
                                </td>
                                <td>
