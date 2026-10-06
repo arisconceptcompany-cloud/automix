@@ -10,6 +10,8 @@ export default function Excel() {
   const [colonnes, setColonnes] = useState([])
   const [info,     setInfo]     = useState(null)
   const [loading,  setLoading]  = useState(false)
+  const [cellStyles, setCellStyles] = useState([])
+  const [cellStylesHeader, setCellStylesHeader] = useState({})
   const [uploadProgress, setUploadProgress] = useState(null)
   const [msg,      setMsg]      = useState(null)
   const [dragging, setDragging] = useState(false)
@@ -33,6 +35,8 @@ export default function Excel() {
         })
         setColonnes(cols)
         setInfo(cached.info || null)
+        setCellStyles(cached.styles || [])
+        setCellStylesHeader(cached.styles_header || {})
         return
       }
     }
@@ -40,7 +44,7 @@ export default function Excel() {
     try {
       const r = await axios.get('/api/excel/produits')
       const data = r.data
-      setCache('excel_produits', { produits: data.produits || [], colonnes: data.colonnes || [], info: data.info || null })
+      setCache('excel_produits', { produits: data.produits || [], colonnes: data.colonnes || [], info: data.info || null, styles: data.styles || [], styles_header: data.styles_header || {} })
       setProduits(data.produits || [])
       const rawCols = data.colonnes || []
       const seen = {}
@@ -50,6 +54,8 @@ export default function Excel() {
       })
       setColonnes(cols)
       setInfo(data.info || null)
+      setCellStyles(data.styles || [])
+      setCellStylesHeader(data.styles_header || {})
       if (data.avertissement) {
         setMsg({ type: 'warn', texte: data.avertissement })
       }
@@ -259,7 +265,21 @@ export default function Excel() {
             <thead>
               <tr>
                 <th>#</th>
-                {cols.map((c, i) => <th key={`h_${i}_${c}`}>{c.replace(/_\d+$/, '')}</th>)}
+                {cols.map((c, i) => {
+                  const base = c.replace(/_\d+$/, '')
+                  const hs = cellStylesHeader[c] || cellStylesHeader[base] || null
+                  return (
+                    <th key={`h_${i}_${c}`}
+                      style={hs ? {
+                        backgroundColor: hs.bg,
+                        color: hs.fg,
+                        fontWeight: hs.b ? 700 : undefined,
+                        fontStyle: hs.i ? 'italic' : undefined,
+                      } : undefined}>
+                      {c.replace(/_\d+$/, '')}
+                    </th>
+                  )
+                })}
               </tr>
             </thead>
             <tbody>
@@ -270,8 +290,16 @@ export default function Excel() {
                     // Récupérer la valeur — gérer les colonnes dupliquées
                     const baseKey = c.replace(/_\d+$/, '')
                     const val = p[baseKey] ?? p[c] ?? null
+                    const st = (cellStyles[i] && (cellStyles[i][c] || cellStyles[i][baseKey])) || null
                     return (
-                      <td key={`c_${i}_${ci}`} title={String(val ?? '')}>
+                      <td key={`c_${i}_${ci}`}
+                        title={String(val ?? '')}
+                        style={st ? {
+                          backgroundColor: st.bg,
+                          color: st.fg,
+                          fontWeight: st.b ? 700 : undefined,
+                          fontStyle: st.i ? 'italic' : undefined,
+                        } : undefined}>
                         {val !== null && val !== undefined ? String(val) : '—'}
                       </td>
                     )

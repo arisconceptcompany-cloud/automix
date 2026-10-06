@@ -38,15 +38,45 @@ const repair = (s) => {
   }
 }
 
-const norm = (s = '') =>
-  repair(String(s)).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '').trim()
+// `norm` est appele des centaines de milliers de fois par rendu de la table :
+// `val()` le rappelle pour chaque couple colonne/cle, et l'ancien code
+// construisait un TextDecoder + un Uint8Array + deux tableaux a chaque appel
+// (repair). On memorise le resultat, la chaine d'entree servant de cle.
+const normMemo = new Map()
+const NORM_MEMO_MAX = 50000
+const norm = (s = '') => {
+  const k = String(s)
+  let v = normMemo.get(k)
+  if (v === undefined) {
+    v = repair(k).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '').trim()
+    // La saisie du filtre passe aussi par norm : on borne le cache.
+    if (normMemo.size >= NORM_MEMO_MAX) normMemo.clear()
+    normMemo.set(k, v)
+  }
+  return v
+}
 
+// Index "colonne normalisee" -> valeur, construit une seule fois par objet.
+// Les produits Excel sont remplaces de maniere immuable (setCle retourne un
+// nouvel objet), l'identite de l'objet est donc un cache sur ; le WeakMap evite
+// de retenir les versions precedentes. La premiere colonne rencontre gagne,
+// comme dans la version lineaire.
+const valIndex = new WeakMap()
 const val = (o, keys) => {
   if (!o) return undefined
+  let idx = valIndex.get(o)
+  if (!idx) {
+    idx = new Map()
+    for (const k of Object.keys(o)) {
+      const nk = norm(k)
+      if (!idx.has(nk)) idx.set(nk, o[k])
+    }
+    valIndex.set(o, idx)
+  }
   if (typeof keys === 'string') keys = [keys]
-  const entries = Object.entries(o)
   for (const k of keys) {
-    for (const [ek, ev] of entries) if (norm(ek) === norm(k)) return ev
+    const nk = norm(k)
+    if (idx.has(nk)) return idx.get(nk)
   }
   return undefined
 }
@@ -190,11 +220,11 @@ export default function MultiScrape() {
     const m = manuel(ref, 'conc1')
     if (m === EFFACE) return ''
     if (String(m || '').trim() !== '') return m
+    const ex = conc1Excel(ref)
+    if (ex !== '' && ex.toUpperCase() !== CONC1_ABSENT.toUpperCase()) return ex
     const s = (saved[ref] || {}).conc
     if (s === null) return ''
     if (String(s || '').trim() !== '') return String(s)
-    const ex = conc1Excel(ref)
-    if (ex !== '') return ex
     const c1 = conc1Map[ref]
     return c1 && c1.prix != null ? `${c1.prix}${c1.vendeur ? ' ' + c1.vendeur : ''}` : ''
   }
@@ -998,6 +1028,23 @@ export default function MultiScrape() {
     return detecterFrais(nom)
   }
 
+  /**
+   * Nom du produit servant a detecter la tranche de frais.
+   *
+   * Source unique de verite : le libelle renvoye par CEDI, a defaut de la
+   * designation Excel. Elle etait reecrite deux fois dans le fichier, avec une
+   * parenthesis manquante dans la colonne du tableau :
+   *
+   *   (results[ref]?.cedi?.nom || p ? String(val(p, [...]) || '') : '')
+   *
+   * `||` lie plus fort que `?:`, donc le libelle CEDI ne servait que de test
+   * de verite puis etait jete. Pour une reference absente de l'Excel (p
+   * undefined) la colonne Frais affichait donc detecterFrais('') = 50 alors
+   * que miniCalculePour calculait le mini avec detecterFrais(libelle CEDI) = 75.
+   */
+  const nomDe = (ref, p) =>
+    (results[ref]?.cedi?.nom || (p ? String(val(p, ['designation', 'désignation', 'nom', 'name']) || '') : '')) || ''
+
   const excelPrix = (p) => {
     if (!p) return []
     const out = []
@@ -1036,7 +1083,7 @@ export default function MultiScrape() {
     const minAll = prixMinDe(ref)
     if (minAll == null) return 0
     const p = refsExcelMap.get(norm(ref))
-    const nom = (results[ref]?.cedi?.nom || (p ? String(val(p, ['designation', 'désignation', 'nom', 'name']) || '') : '')) || ''
+    const nom = nomDe(ref, p)
     const frais = fraisDe(ref, nom)
     const eco = ecoUtilise(ref)
     const ecoN = eco != null && !isNaN(parseFloat(eco)) ? parseFloat(eco) : 0
@@ -1053,7 +1100,10 @@ export default function MultiScrape() {
     return mini != null && conc1 != null && mini > conc1
   }
 
-  const refsAffichees = Object.keys(refsInfo).filter(ref => results[ref])
+  const refsAffichees = useMemo(
+    () => Object.keys(refsInfo).filter(ref => results[ref]),
+    [refsInfo, results]
+  )
   const pct = total > 0 ? Math.round((fait / total) * 100) : 0
 
   // ── Suppression automatique ────────────────────────────────────────────
@@ -1364,7 +1414,7 @@ export default function MultiScrape() {
                 const estNouveau = refsInfo[ref] && !refsInfo[ref].dans_excel
                 const prixExcel = excelPrix(p)
                 const ecoExcel = p ? ecoDe(p) : null
-                const nom = (results[ref]?.cedi?.nom || p ? String(val(p, ['designation', 'désignation', 'nom', 'name']) || '') : '') || ''
+                const nom = nomDe(ref, p)
                 const minAll = prixMinDe(ref)
                 const fraisUsed = fraisDe(ref, nom)
                 const ecoManuel = String((manuels[ref] || {}).eco || '').trim()
